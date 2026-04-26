@@ -15,6 +15,7 @@
 use std::{fs, io::Write, process::Command};
 
 use anyhow::Result;
+use semver::Version;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -56,23 +57,9 @@ fn main() -> Result<()> {
 }
 
 fn cal_version_code(version: &str) -> Result<usize> {
-    let major = version
-        .split('.')
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("Invalid version format"))?;
-    let major: usize = major.parse()?;
-    let minor = version
-        .split('.')
-        .nth(1)
-        .ok_or_else(|| anyhow::anyhow!("Invalid version format"))?;
-    let minor: usize = minor.parse()?;
-    let patch = version
-        .split('.')
-        .nth(2)
-        .ok_or_else(|| anyhow::anyhow!("Invalid version format"))?;
-    let patch: usize = patch.parse()?;
+    let version = Version::parse(version)?;
 
-    Ok(major * 100000 + minor * 1000 + patch)
+    Ok(version.major as usize * 100000 + version.minor as usize * 1000 + version.patch as usize)
 }
 
 // NOTE: keep in sync with xtask/src/main.rs cal_git_code()
@@ -91,18 +78,7 @@ fn gen_module_prop(data: &CargoConfig) -> Result<()> {
     let package = &data.package;
     let id = package.name.replace('-', "_");
     let version_code = cal_version_code(&package.version)?;
-    let authors = &package.authors;
-    let mut author = String::new();
-    let mut count = 0;
-    for a in authors {
-        count += 1;
-        if count > 1 {
-            author += &format!("& {a} ");
-        } else {
-            author += &format!("{a} ");
-        }
-    }
-    let author = author.trim();
+    let author = package.authors.join(" & ");
     let version = format!("{}-{}", package.version, cal_git_code()?);
 
     let mut file = fs::OpenOptions::new()

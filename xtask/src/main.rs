@@ -25,6 +25,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand, ValueEnum};
 use fs_extra::{dir, file};
 use hybrid_mount_notify::{NotifyRequest, maybe_send_output_dir_notification};
+use semver::Version;
 use serde::Deserialize;
 use zip::{CompressionMethod, write::FileOptions};
 
@@ -611,12 +612,8 @@ fn compile_core(release: bool, arch: Arch) -> Result<()> {
 }
 
 fn calculate_version_code(version_str: &str) -> Result<String> {
-    let parts: Vec<&str> = version_str.split('.').collect();
-    anyhow::ensure!(parts.len() >= 3, "invalid version: {}", version_str);
-    let major: usize = parts[0].parse()?;
-    let minor: usize = parts[1].parse()?;
-    let patch: usize = parts[2].parse()?;
-    Ok((major * 100000 + minor * 1000 + patch).to_string())
+    let version = Version::parse(version_str)?;
+    Ok((version.major * 100000 + version.minor * 1000 + version.patch).to_string())
 }
 
 fn resolve_release_version(tag: &str) -> Result<VersionInfo> {

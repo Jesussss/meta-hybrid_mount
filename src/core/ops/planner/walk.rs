@@ -18,7 +18,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use super::{effective_mount_mode, log_mode_decision, path_has_descendant_rule};
+use super::log_mode_decision;
 use crate::{conf::config, core::inventory::Module, domain::MountMode, utils};
 
 struct ProcessingItem {
@@ -120,11 +120,10 @@ impl PlannerContext {
             let requested_mode = module
                 .rules
                 .get_mode(relative_path.to_string_lossy().as_ref());
-            let effective_mode = effective_mount_mode(&requested_mode, self.use_kasumi);
+            let effective_mode = module.rules.effective_mode(&relative_path, self.use_kasumi);
             log_mode_decision(module, &relative_path, &requested_mode, &effective_mode);
 
-            let has_descendant_rules =
-                path_has_descendant_rule(&module.rules.paths, &relative_path);
+            let has_descendant_rules = module.rules.has_descendant_rule(&relative_path);
 
             let mut child_dirs = Vec::new();
             let mut direct_non_dir_entries = false;

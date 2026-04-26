@@ -149,20 +149,6 @@ where
     Ok(())
 }
 
-fn effective_mode(mode: &MountMode, use_kasumi: bool) -> MountMode {
-    if matches!(mode, MountMode::Kasumi) && !use_kasumi {
-        MountMode::Ignore
-    } else {
-        *mode
-    }
-}
-
-fn path_has_descendant_rule(rules: &ModuleRules, relative_path: &Path) -> bool {
-    let relative = relative_path.to_string_lossy();
-    let prefix = format!("{relative}/");
-    rules.paths.keys().any(|path| path.starts_with(&prefix))
-}
-
 fn should_fallback_overlay_files(
     rules: &ModuleRules,
     relative_path: &Path,
@@ -171,13 +157,10 @@ fn should_fallback_overlay_files(
 ) -> bool {
     overlay_fallback_enabled
         && matches!(
-            effective_mode(
-                &rules.get_mode(relative_path.to_string_lossy().as_ref()),
-                use_kasumi
-            ),
+            rules.effective_mode(relative_path, use_kasumi),
             MountMode::Overlay
         )
-        && path_has_descendant_rule(rules, relative_path)
+        && rules.has_descendant_rule(relative_path)
 }
 
 fn collect_magic_subtree(
@@ -211,14 +194,11 @@ fn collect_magic_subtree(
         let name = file_name.to_string_lossy().into_owned();
         let entry_path = entry.path();
         let next_relative = relative_path.join(&file_name);
-        let effective_mode = effective_mode(
-            &rules.get_mode(next_relative.to_string_lossy().as_ref()),
-            use_kasumi,
-        );
+        let effective_mode = rules.effective_mode(&next_relative, use_kasumi);
 
         match entry.file_type() {
             Ok(file_type) if file_type.is_dir() => {
-                let has_descendant_rules = path_has_descendant_rule(rules, &next_relative);
+                let has_descendant_rules = rules.has_descendant_rule(&next_relative);
                 if matches!(effective_mode, MountMode::Magic) && !has_descendant_rules {
                     if let Some(mut node) = Node::new_module(&name, &entry) {
                         let subtree_has_file =

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 use serde::{Deserialize, Serialize};
 
@@ -88,6 +88,21 @@ impl ModuleRules {
         }
 
         self.default_mode
+    }
+
+    pub fn effective_mode(&self, relative_path: &Path, use_kasumi: bool) -> MountMode {
+        let mode = self.get_mode(relative_path.to_string_lossy().as_ref());
+        if matches!(mode, MountMode::Kasumi) && !use_kasumi {
+            MountMode::Ignore
+        } else {
+            mode
+        }
+    }
+
+    pub fn has_descendant_rule(&self, relative_path: &Path) -> bool {
+        let relative = relative_path.to_string_lossy();
+        let prefix = format!("{relative}/");
+        self.paths.keys().any(|path| path.starts_with(&prefix))
     }
 }
 

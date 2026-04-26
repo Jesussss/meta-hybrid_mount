@@ -19,6 +19,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
+use serde::Serialize;
 
 use crate::{
     conf::{cli::Cli, config::Config, store::ConfigSession},
@@ -31,6 +32,15 @@ pub(super) fn load_effective_config(cli: &Cli) -> Result<Config> {
 
 pub(super) fn require_live_kasumi(config: &Config, description: &str) -> Result<()> {
     kasumi_mount::require_live(config, description)
+}
+
+pub(super) fn print_json<T: Serialize>(payload: &T, description: &str) -> Result<()> {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(payload)
+            .with_context(|| format!("Failed to serialize {description}"))?
+    );
+    Ok(())
 }
 
 pub(super) fn detect_rule_file_type(path: &Path) -> Result<i32> {

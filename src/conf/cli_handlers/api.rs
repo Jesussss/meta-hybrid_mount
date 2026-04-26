@@ -14,7 +14,7 @@
 
 use anyhow::Result;
 
-use super::shared::require_live_kasumi;
+use super::shared::{print_json, require_live_kasumi};
 use crate::{conf::cli::Cli, core::api, mount::kasumi as kasumi_mount};
 
 pub fn handle_api_storage() -> Result<()> {
@@ -28,8 +28,7 @@ pub fn handle_api_storage() -> Result<()> {
         crate::core::runtime_state::RuntimeState::default()
     });
     let payload = api::build_storage_payload(&state);
-    println!("{}", serde_json::to_string_pretty(&payload)?);
-    Ok(())
+    print_json(&payload, "storage payload")
 }
 
 pub fn handle_api_mount_stats() -> Result<()> {
@@ -43,8 +42,7 @@ pub fn handle_api_mount_stats() -> Result<()> {
         crate::core::runtime_state::RuntimeState::default()
     });
     let payload = api::build_mount_stats_payload(&state);
-    println!("{}", serde_json::to_string_pretty(&payload)?);
-    Ok(())
+    print_json(&payload, "mount stats payload")
 }
 
 pub fn handle_api_mount_topology(cli: &Cli) -> Result<()> {
@@ -59,28 +57,24 @@ pub fn handle_api_mount_topology(cli: &Cli) -> Result<()> {
         crate::core::runtime_state::RuntimeState::default()
     });
     let payload = api::build_mount_topology_payload(&config, &state);
-    println!("{}", serde_json::to_string_pretty(&payload)?);
-    Ok(())
+    print_json(&payload, "mount topology payload")
 }
 
 pub fn handle_api_partitions(cli: &Cli) -> Result<()> {
     let config = crate::conf::loader::load_config(cli)?;
     let payload = api::build_partitions_payload(&config);
-    println!("{}", serde_json::to_string_pretty(&payload)?);
-    Ok(())
+    print_json(&payload, "partitions payload")
 }
 
 pub fn handle_api_lkm(cli: &Cli) -> Result<()> {
     let config = crate::conf::loader::load_config(cli)?;
     let payload = api::build_lkm_payload(&config);
-    println!("{}", serde_json::to_string_pretty(&payload)?);
-    Ok(())
+    print_json(&payload, "LKM payload")
 }
 
 pub fn handle_api_features() -> Result<()> {
     let payload = api::build_features_payload();
-    println!("{}", serde_json::to_string_pretty(&payload)?);
-    Ok(())
+    print_json(&payload, "features payload")
 }
 
 pub fn handle_api_hooks(cli: &Cli) -> Result<()> {

@@ -25,7 +25,7 @@ use anyhow::{Context, Result, bail};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::fs::ioctl_ficlone;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use rustix::fs::{Gid, Uid, chown};
+use rustix::fs::{CWD, FileType, Gid, Mode, Uid, chown, mknodat};
 use walkdir::WalkDir;
 
 use crate::defs;
@@ -65,13 +65,10 @@ pub fn atomic_write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, content: C) -> Resu
 
     tempfile.write_all(content.as_ref())?;
 
-    fs::rename(tempfile.path(), path).with_context(|| {
-        format!(
-            "failed to atomically replace {} from {}",
-            path.display(),
-            tempfile.path().display()
-        )
-    })?;
+    tempfile
+        .persist(path)
+        .map(|_| ())
+        .with_context(|| format!("failed to atomically replace {}", path.display()))?;
 
     Ok(())
 }
@@ -191,6 +188,25 @@ fn clone_ownership(src: &Path, dst: &Path) {
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn clone_ownership(_src: &Path, _dst: &Path) {}
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn make_device_node(path: &Path, mode: u32, rdev: u64) -> Result<()> {
+    let file_type = FileType::from_raw_mode(mode);
+    if matches!(file_type, FileType::Unknown) {
+        bail!("mknod failed for {}: unknown file type", path.display());
+    }
+
+    mknodat(
+        CWD,
+        path,
+        file_type,
+        Mode::from_raw_mode(mode & 0o7777),
+        rdev as _,
+    )
+    .with_context(|| format!("mknod failed for {}", path.display()))?;
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn make_device_node(path: &Path, mode: u32, rdev: u64) -> Result<()> {
     let c_path = CString::new(path.as_os_str().as_encoded_bytes())?;
     let dev = rdev as libc::dev_t;

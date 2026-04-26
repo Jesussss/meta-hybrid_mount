@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
-use super::shared::load_effective_config;
+use super::shared::{load_effective_config, print_json};
 use crate::{
     conf::cli::Cli,
     core::api,
@@ -25,10 +25,7 @@ pub fn handle_lkm_status(cli: &Cli) -> Result<()> {
     let config = load_effective_config(cli)?;
     crate::scoped_log!(debug, "cli:lkm:status", "start");
     let payload = api::build_lkm_payload(&config);
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&payload).context("Failed to serialize LKM status")?
-    );
+    print_json(&payload, "LKM status")?;
     crate::scoped_log!(debug, "cli:lkm:status", "complete");
     Ok(())
 }

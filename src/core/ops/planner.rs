@@ -34,14 +34,6 @@ use crate::{
     partitions, utils,
 };
 
-fn effective_mount_mode(requested: &MountMode, use_kasumi: bool) -> MountMode {
-    if matches!(requested, MountMode::Kasumi) && !use_kasumi {
-        MountMode::Ignore
-    } else {
-        *requested
-    }
-}
-
 fn sorted_ids(ids: HashSet<String>) -> Vec<String> {
     let mut out: Vec<String> = ids.into_iter().collect();
     out.sort();
@@ -54,12 +46,6 @@ fn module_content_path(storage_root: &Path, module: &Module) -> Option<PathBuf> 
         content_path = module.source_path.clone();
     }
     content_path.exists().then_some(content_path)
-}
-
-fn path_has_descendant_rule(paths: &HashMap<String, MountMode>, relative_path: &Path) -> bool {
-    let relative = relative_path.to_string_lossy();
-    let prefix = format!("{relative}/");
-    paths.keys().any(|path| path.starts_with(&prefix))
 }
 
 fn log_mode_decision(

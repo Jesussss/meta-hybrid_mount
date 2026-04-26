@@ -14,10 +14,12 @@
 
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::Serialize;
 
-use super::shared::{detect_rule_file_type, load_effective_config, require_live_kasumi};
+use super::shared::{
+    detect_rule_file_type, load_effective_config, print_json, require_live_kasumi,
+};
 use crate::{
     conf::{cli::Cli, schema::KasumiConfig},
     core::{
@@ -83,11 +85,7 @@ pub fn handle_kasumi_status(cli: &Cli) -> Result<()> {
         },
     };
 
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&output).context("Failed to serialize Kasumi status")?
-    );
-    Ok(())
+    print_json(&output, "Kasumi status")
 }
 
 pub fn handle_kasumi_list(cli: &Cli) -> Result<()> {
@@ -97,11 +95,7 @@ pub fn handle_kasumi_list(cli: &Cli) -> Result<()> {
     } else {
         Vec::new()
     };
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&payload).context("Failed to serialize Kasumi rules")?
-    );
-    Ok(())
+    print_json(&payload, "Kasumi rules")
 }
 
 pub fn handle_kasumi_version(cli: &Cli) -> Result<()> {
@@ -116,20 +110,12 @@ pub fn handle_kasumi_version(cli: &Cli) -> Result<()> {
         RuntimeState::default()
     });
     let payload = api::build_kasumi_version_payload(&config, &state);
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&payload).context("Failed to serialize Kasumi version")?
-    );
-    Ok(())
+    print_json(&payload, "Kasumi version")
 }
 
 pub fn handle_kasumi_features() -> Result<()> {
     let output = api::build_features_payload();
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&output).context("Failed to serialize Kasumi features")?
-    );
-    Ok(())
+    print_json(&output, "Kasumi features")
 }
 
 pub fn handle_kasumi_hooks() -> Result<()> {
