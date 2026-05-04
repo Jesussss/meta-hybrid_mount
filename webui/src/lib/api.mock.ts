@@ -317,8 +317,29 @@ export const MockAPI: AppAPI = {
       ...uname,
     };
   },
+  async applyKasumiUname(
+    mode: "scoped" | "global",
+    uname: Pick<KasumiUnameConfig, "release" | "version">,
+  ): Promise<void> {
+    await delay(220);
+    mockState.kasumi.unameMode = mode;
+    mockState.kasumi.uname.release = uname.release;
+    mockState.kasumi.uname.version = uname.version;
+  },
   async clearKasumiUname(): Promise<void> {
     await delay(160);
+    mockState.kasumi.uname = {
+      sysname: "",
+      nodename: "",
+      release: "",
+      version: "",
+      machine: "",
+      domainname: "",
+    };
+  },
+  async restoreKasumiUnameGlobal(): Promise<void> {
+    await delay(160);
+    mockState.kasumi.unameMode = "global";
     mockState.kasumi.uname = {
       sysname: "",
       nodename: "",

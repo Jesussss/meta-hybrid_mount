@@ -77,6 +77,14 @@ pub fn run(cli: &Cli, command: &Commands) -> Result<()> {
             KasumiCommands::RestoreUnameGlobal => {
                 cli_handlers::handle_kasumi_restore_uname_global()
             }
+            KasumiCommands::SetUname {
+                mode,
+                release,
+                version,
+            } => cli_handlers::handle_kasumi_set_uname(cli, mode, release, version),
+            KasumiCommands::ClearUname { mode } => {
+                cli_handlers::handle_kasumi_clear_uname(cli, mode)
+            }
             KasumiCommands::Rule { command } => match command {
                 KasumiRuleCommands::Add {
                     target,

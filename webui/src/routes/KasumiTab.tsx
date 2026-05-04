@@ -213,6 +213,22 @@ export default function KasumiTab() {
     }
   }
 
+  async function saveAndApplyUname() {
+    const release = forms.release.trim();
+    const version = forms.version.trim();
+
+    await API.setKasumiUnameMode(forms.unameMode);
+    await API.setKasumiUname({ release, version });
+    if (release && version) {
+      await API.applyKasumiUname(forms.unameMode, { release, version });
+    }
+  }
+
+  async function clearUname() {
+    await API.setKasumiUnameMode(forms.unameMode);
+    await API.clearKasumiUname();
+  }
+
   onMount(() => {
     void initialize();
   });
@@ -261,6 +277,13 @@ export default function KasumiTab() {
   );
   const statusChipText = createMemo(
     () => status()?.mirror_path || config()?.mirror_path || "-",
+  );
+  const unameModeDescription = createMemo(() =>
+    forms.unameMode === "global"
+      ? (uiStore.L.kasumi?.unameModeGlobalDesc ??
+        "System-wide: rewrites init_uts_ns, every task sees fake values.")
+      : (uiStore.L.kasumi?.unameModeScopedDesc ??
+        "Per-process: only Kasumi-hidden UIDs see fake values."),
   );
 
   function isSectionExpanded(id: string) {
@@ -663,90 +686,136 @@ export default function KasumiTab() {
             >
               <div class="kasumi-section-body-inner">
                 <div class="kasumi-section-body field-stack">
-                  <label class="kasumi-select-label">
-                    {uiStore.L.kasumi?.unameMode ?? "Uname Mode"}
-                  </label>
-                  <select
-                    class="kasumi-select"
-                    value={forms.unameMode}
-                    disabled={pending()}
-                    onInput={(e: Event) =>
-                      setForms(
-                        "unameMode",
-                        (e.currentTarget as HTMLSelectElement).value === "global"
-                          ? "global"
-                          : "scoped",
-                      )
-                    }
-                  >
-                    <option value="scoped">
-                      {uiStore.L.kasumi?.unameModeScoped ?? "Scoped"}
-                    </option>
-                    <option value="global">
-                      {uiStore.L.kasumi?.unameModeGlobal ?? "Global"}
-                    </option>
-                  </select>
-                  <md-outlined-text-field
-                    class="full-field kasumi-input-field"
-                    label={uiStore.L.kasumi?.unameRelease ?? "Uname Release"}
-                    value={forms.release}
-                    onInput={(e: Event) =>
-                      setForms(
-                        "release",
-                        (e.currentTarget as HTMLInputElement).value,
-                      )
-                    }
-                    disabled={pending()}
-                  />
-                  <md-outlined-text-field
-                    class="full-field kasumi-input-field"
-                    label={uiStore.L.kasumi?.unameVersion ?? "Uname Version"}
-                    value={forms.version}
-                    onInput={(e: Event) =>
-                      setForms(
-                        "version",
-                        (e.currentTarget as HTMLInputElement).value,
-                      )
-                    }
-                    disabled={pending()}
-                  />
-                  <div class="button-row">
-                    <md-outlined-button
-                      disabled={pending()}
-                      onClick={() => void fillOriginalKernelUname()}
-                    >
-                      {uiStore.L.kasumi?.fillOriginalKernel ??
-                        "Load Original Kernel Values"}
-                    </md-outlined-button>
-                    <md-filled-button
-                      disabled={pending()}
-                      onClick={() =>
-                        runAction(
-                          async () => {
-                            await API.setKasumiUnameMode(forms.unameMode);
-                            await API.setKasumiUname({
-                              release: forms.release,
-                              version: forms.version,
-                            });
-                          },
-                          uiStore.L.common?.saved ?? "Saved",
-                        )
-                      }
-                    >
-                      {uiStore.L.kasumi?.saveUname ?? "Save Uname"}
-                    </md-filled-button>
-                    <md-outlined-button
-                      disabled={pending()}
-                      onClick={() =>
-                        runAction(
-                          () => API.clearKasumiUname(),
-                          uiStore.L.kasumi?.clearUname ?? "Uname cleared",
-                        )
-                      }
-                    >
-                      {uiStore.L.kasumi?.clearUname ?? "Clear Uname"}
-                    </md-outlined-button>
+                  <div class="uname-panel">
+                    <div class="uname-panel-head">
+                      <div>
+                        <div class="uname-panel-title">
+                          {uiStore.L.kasumi?.unameSpoofTitle ??
+                            "Kernel version spoofing"}
+                        </div>
+                        <div class="uname-panel-subtitle">
+                          {forms.release || forms.version
+                            ? `${forms.release || "-"} · ${forms.version || "-"}`
+                            : (uiStore.L.kasumi?.unameEmptyHint ??
+                              "No spoofed uname configured.")}
+                        </div>
+                      </div>
+                      <div class={`state-pill ${forms.unameMode === "global" ? "active" : ""}`}>
+                        {forms.unameMode === "global"
+                          ? (uiStore.L.kasumi?.unameModeGlobal ?? "Global")
+                          : (uiStore.L.kasumi?.unameModeScoped ?? "Scoped")}
+                      </div>
+                    </div>
+
+                    <div class="uname-field-grid">
+                      <md-outlined-text-field
+                        class="full-field kasumi-input-field"
+                        label={uiStore.L.kasumi?.unameRelease ?? "Version name"}
+                        value={forms.release}
+                        supporting-text={
+                          uiStore.L.kasumi?.unameReleaseDesc ??
+                          "Kernel release, for example 5.15.0-generic."
+                        }
+                        onInput={(e: Event) =>
+                          setForms(
+                            "release",
+                            (e.currentTarget as HTMLInputElement).value,
+                          )
+                        }
+                        disabled={pending()}
+                      />
+                      <md-outlined-text-field
+                        class="full-field kasumi-input-field"
+                        label={uiStore.L.kasumi?.unameVersion ?? "Build time"}
+                        value={forms.version}
+                        supporting-text={
+                          uiStore.L.kasumi?.unameVersionDesc ??
+                          "Kernel version/build timestamp."
+                        }
+                        onInput={(e: Event) =>
+                          setForms(
+                            "version",
+                            (e.currentTarget as HTMLInputElement).value,
+                          )
+                        }
+                        disabled={pending()}
+                      />
+                    </div>
+
+                    <div class="uname-mode-row">
+                      <div class="uname-segmented" role="radiogroup">
+                        <button
+                          type="button"
+                          class={forms.unameMode === "scoped" ? "selected" : ""}
+                          disabled={pending()}
+                          onClick={() => setForms("unameMode", "scoped")}
+                        >
+                          {uiStore.L.kasumi?.unameModeScoped ?? "Scoped"}
+                        </button>
+                        <button
+                          type="button"
+                          class={forms.unameMode === "global" ? "selected" : ""}
+                          disabled={pending()}
+                          onClick={() => setForms("unameMode", "global")}
+                        >
+                          {uiStore.L.kasumi?.unameModeGlobal ?? "Global"}
+                        </button>
+                      </div>
+                      <div class="uname-mode-desc">{unameModeDescription()}</div>
+                    </div>
+
+                    <div class="button-row">
+                      <md-outlined-button
+                        disabled={pending()}
+                        onClick={() => void fillOriginalKernelUname()}
+                      >
+                        {uiStore.L.kasumi?.fillOriginalKernel ??
+                          "Use current kernel info"}
+                      </md-outlined-button>
+                      <md-filled-button
+                        disabled={
+                          pending() ||
+                          !forms.release.trim() ||
+                          !forms.version.trim()
+                        }
+                        onClick={() =>
+                          runAction(
+                            saveAndApplyUname,
+                            uiStore.L.kasumi?.applyUname ?? "Uname applied",
+                          )
+                        }
+                      >
+                        {uiStore.L.kasumi?.applyUname ?? "Apply Uname"}
+                      </md-filled-button>
+                      <md-outlined-button
+                        disabled={pending()}
+                        onClick={() =>
+                          runAction(
+                            clearUname,
+                            uiStore.L.kasumi?.clearUname ?? "Uname cleared",
+                          )
+                        }
+                      >
+                        {uiStore.L.kasumi?.clearUname ?? "Clear Uname"}
+                      </md-outlined-button>
+                      <Show when={forms.unameMode === "global"}>
+                        <md-outlined-button
+                          disabled={pending()}
+                          onClick={() =>
+                            runAction(
+                              () => API.restoreKasumiUnameGlobal(),
+                              uiStore.L.kasumi?.restoreUnameGlobal ??
+                                "Original uname restored",
+                            )
+                          }
+                        >
+                          {uiStore.L.kasumi?.restoreUnameGlobal ??
+                            "Restore original"}
+                        </md-outlined-button>
+                      </Show>
+                    </div>
                   </div>
+
                   <md-outlined-text-field
                     class="full-field kasumi-input-field"
                     label={uiStore.L.kasumi?.cmdlineValue ?? "Cmdline Value"}

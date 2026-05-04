@@ -73,6 +73,18 @@ pub enum KasumiCommands {
     FixMounts,
     #[command(name = "restore-uname-global")]
     RestoreUnameGlobal,
+    #[command(name = "set-uname")]
+    SetUname {
+        #[arg(long = "mode", default_value = "scoped")]
+        mode: String,
+        release: String,
+        version: String,
+    },
+    #[command(name = "clear-uname")]
+    ClearUname {
+        #[arg(long = "mode", default_value = "scoped")]
+        mode: String,
+    },
     Rule {
         #[command(subcommand)]
         command: KasumiRuleCommands,

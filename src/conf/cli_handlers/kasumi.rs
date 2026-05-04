@@ -14,7 +14,7 @@
 
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use serde::Serialize;
 
 use super::shared::{
@@ -22,7 +22,10 @@ use super::shared::{
     with_live_kasumi,
 };
 use crate::{
-    conf::{cli::Cli, schema::KasumiConfig},
+    conf::{
+        cli::Cli,
+        schema::{KasumiConfig, KasumiUnameMode},
+    },
     core::{
         api::{self, LkmPayload},
         runtime_state::KasumiRuntimeInfo,
@@ -30,6 +33,29 @@ use crate::{
     mount::kasumi as kasumi_mount,
     sys::kasumi,
 };
+
+fn parse_uname_mode(mode: &str) -> Result<KasumiUnameMode> {
+    match mode {
+        "scoped" => Ok(KasumiUnameMode::Scoped),
+        "global" => Ok(KasumiUnameMode::Global),
+        _ => bail!("invalid uname mode: {mode} (expected scoped or global)"),
+    }
+}
+
+fn apply_uname(mode: KasumiUnameMode, release: &str, version: &str) -> Result<()> {
+    let mut uname = kasumi::KasumiSpoofUname::default();
+    if !release.is_empty() {
+        uname.set_release(release)?;
+    }
+    if !version.is_empty() {
+        uname.set_version(version)?;
+    }
+
+    match mode {
+        KasumiUnameMode::Scoped => kasumi::set_uname(&uname),
+        KasumiUnameMode::Global => kasumi::set_uname_global(&uname),
+    }
+}
 
 #[derive(Debug, Clone, Serialize)]
 struct KasumiStatusPayload {
@@ -142,6 +168,47 @@ pub fn handle_kasumi_restore_uname_global() -> Result<()> {
     crate::scoped_log!(info, "cli:kasumi:restore_uname_global", "complete");
     println!("Kasumi global uname restored.");
     Ok(())
+}
+
+pub fn handle_kasumi_set_uname(cli: &Cli, mode: &str, release: &str, version: &str) -> Result<()> {
+    let release = release.trim();
+    let version = version.trim();
+    if release.is_empty() || version.is_empty() {
+        bail!("uname release and version must both be non-empty");
+    }
+
+    let mode = parse_uname_mode(mode)?;
+    with_live_kasumi(cli, "set Kasumi uname", || {
+        apply_uname(mode, release, version)?;
+        println!(
+            "Kasumi uname applied: mode={}, release={}, version={}",
+            match mode {
+                KasumiUnameMode::Scoped => "scoped",
+                KasumiUnameMode::Global => "global",
+            },
+            release,
+            version
+        );
+        Ok(())
+    })
+}
+
+pub fn handle_kasumi_clear_uname(cli: &Cli, mode: &str) -> Result<()> {
+    let mode = parse_uname_mode(mode)?;
+    with_live_kasumi(cli, "clear Kasumi uname", || {
+        match mode {
+            KasumiUnameMode::Scoped => apply_uname(KasumiUnameMode::Scoped, "", "")?,
+            KasumiUnameMode::Global => kasumi::restore_uname_global()?,
+        }
+        println!(
+            "Kasumi uname cleared: mode={}",
+            match mode {
+                KasumiUnameMode::Scoped => "scoped",
+                KasumiUnameMode::Global => "global",
+            }
+        );
+        Ok(())
+    })
 }
 
 pub fn handle_kasumi_rule_add(

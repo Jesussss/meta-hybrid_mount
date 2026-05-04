@@ -124,7 +124,12 @@ export interface AppAPI {
   getOriginalKernelUname: () => Promise<KernelUnameValues>;
   setKasumiUnameMode: (mode: "scoped" | "global") => Promise<void>;
   setKasumiUname: (uname: Partial<KasumiUnameConfig>) => Promise<void>;
+  applyKasumiUname: (
+    mode: "scoped" | "global",
+    uname: Pick<KasumiUnameConfig, "release" | "version">,
+  ) => Promise<void>;
   clearKasumiUname: () => Promise<void>;
+  restoreKasumiUnameGlobal: () => Promise<void>;
   setKasumiCmdline: (value: string) => Promise<void>;
   clearKasumiCmdline: () => Promise<void>;
   addKasumiMapsRule: (rule: {
@@ -996,7 +1001,23 @@ const RealAPI: AppAPI = {
       config.kasumi.uname_version = config.kasumi.uname.version;
     });
   },
+  applyKasumiUname: async (
+    mode: "scoped" | "global",
+    uname: Pick<KasumiUnameConfig, "release" | "version">,
+  ): Promise<void> => {
+    const release = uname.release.trim();
+    const version = uname.version.trim();
+    if (!release || !version) {
+      throw new AppError("uname release and version must both be non-empty");
+    }
+    await runCommandExpectOk(
+      `${PATHS.BINARY} kasumi set-uname --mode ${
+        mode === "global" ? "global" : "scoped"
+      } "${shellEscapeDoubleQuoted(release)}" "${shellEscapeDoubleQuoted(version)}"`,
+    );
+  },
   clearKasumiUname: async (): Promise<void> => {
+    const previousConfig = await loadConfigFromFile();
     await mutateConfig((config) => {
       config.kasumi.uname = {
         sysname: "",
@@ -1009,6 +1030,14 @@ const RealAPI: AppAPI = {
       config.kasumi.uname_release = "";
       config.kasumi.uname_version = "";
     });
+    await runCommandExpectOk(
+      `${PATHS.BINARY} kasumi clear-uname --mode ${
+        previousConfig.kasumi.uname_mode === "global" ? "global" : "scoped"
+      }`,
+    );
+  },
+  restoreKasumiUnameGlobal: async (): Promise<void> => {
+    await runCommandExpectOk(`${PATHS.BINARY} kasumi restore-uname-global`);
   },
   setKasumiCmdline: async (value: string): Promise<void> => {
     await mutateConfig((config) => {
