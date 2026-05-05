@@ -30,6 +30,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      packages: read
+    container:
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout Code
@@ -57,39 +63,18 @@ jobs:
           cp kasumi_uapi_artifact/kasumi_uapi.h src/sys/kasumi_uapi.h
           sha256sum src/sys/kasumi_uapi.h
 
-      - name: Setup Android NDK
-        uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: r29
-
-      - name: Setup Rust Toolchain
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          targets: aarch64-linux-android
-          components: rust-src, clippy
-
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: true
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+      - name: Cache pnpm store
+        uses: actions/cache@v5
         with:
-          version: "10"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "20"
-          cache: pnpm
-          cache-dependency-path: webui/pnpm-lock.yaml
-
-      - name: Install build dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y gcc-multilib
-          cargo install cargo-ndk --locked
+          path: /root/.local/share/pnpm/store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('webui/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-
 
       - name: Build Release Package
         env:
@@ -100,21 +85,23 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          export ANDROID_NDK_LATEST_HOME="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_ROOT}"
           cargo xtask build --release --tag ${{ github.ref_name }}
 
       - name: Prepare Release Metadata
         id: meta
         run: |
-          ZIP_FILE=$(cd output && ls *.zip | head -n 1)
-          ZIP_NAME=$(basename "$ZIP_FILE")
+          set -euo pipefail
+          mapfile -t ZIP_FILES < <(find output -maxdepth 1 -type f -name '*.zip' | sort)
+          test "${#ZIP_FILES[@]}" -gt 0
+          ZIP_PATH="${ZIP_FILES[0]}"
+          ZIP_NAME=$(basename "$ZIP_PATH")
           REPO="${{ github.repository }}"
           TAG="${{ github.ref_name }}"
           
           CLEAN_VERSION="${TAG#v}"
-          VERSION_CODE=$(echo $CLEAN_VERSION | awk -F. '{printf "%d%02d%02d", $1, $2, $3}')
+          VERSION_CODE=$(awk -F. '{printf "%d%02d%02d", $1, $2, $3}' <<< "$CLEAN_VERSION")
           
-          echo "ZIP_PATH=output/$ZIP_NAME" >> $GITHUB_ENV
+          echo "ZIP_PATH=$ZIP_PATH" >> "$GITHUB_ENV"
           
           DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/$ZIP_NAME"
           CHANGELOG_URL="https://raw.githubusercontent.com/$REPO/master/changelog.md"

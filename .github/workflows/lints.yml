@@ -32,14 +32,17 @@ env:
 jobs:
   lints-check:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      checks: write
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v6
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: nightly
-          targets: aarch64-linux-android
-          components: rustfmt, clippy
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
       - name: Format codes
@@ -54,21 +57,26 @@ jobs:
 
   webui-lints:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: read
+      packages: read
     defaults:
       run:
         working-directory: webui
     steps:
       - uses: actions/checkout@v6
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+      - name: Cache pnpm store
+        uses: actions/cache@v5
         with:
-          version: "10"
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: webui/pnpm-lock.yaml
+          path: /root/.local/share/pnpm/store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('webui/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Generate constants
