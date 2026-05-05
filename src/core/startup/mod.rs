@@ -16,6 +16,7 @@ use anyhow::{Context, Result};
 
 use crate::{
     conf::{cli::Cli, loader},
+    core::daemon,
     defs, sys, utils,
 };
 
@@ -70,5 +71,6 @@ pub fn run(cli: &Cli) -> Result<()> {
         crate::scoped_log!(warn, "startup", "config: disable_umount=true");
     }
 
-    recovery::run(config)
+    let config = recovery::run(config)?;
+    daemon::serve(config)
 }

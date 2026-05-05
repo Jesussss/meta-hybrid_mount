@@ -17,6 +17,7 @@ pub mod backend;
 pub mod backend_capabilities;
 pub mod cli_commands;
 pub mod controller;
+pub mod daemon;
 pub mod entry;
 pub mod inventory;
 pub mod kasumi_coordinator;

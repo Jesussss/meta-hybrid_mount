@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod api;
-mod basic;
+mod client;
+pub(crate) mod protocol;
+mod server;
 
-pub use self::{api::*, basic::*};
+pub(crate) use self::protocol::DaemonCommand;
+pub use self::{client::dispatch, server::serve};

@@ -12,30 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
-use super::shared::{
-    load_effective_config, load_runtime_state_or_default, print_json, require_live_kasumi,
+use crate::{
+    conf::{cli::Cli, config::Config},
+    core::api,
 };
-use crate::{conf::cli::Cli, core::api, mount::kasumi as kasumi_mount};
 
-pub fn handle_api_storage() -> Result<()> {
-    let state = load_runtime_state_or_default();
-    let payload = api::build_storage_payload(&state);
-    print_json(&payload, "storage payload")
+fn load_effective_config(cli: &Cli) -> Result<Config> {
+    crate::conf::store::ConfigSession::load_persisted(cli)
 }
 
-pub fn handle_api_mount_stats() -> Result<()> {
-    let state = load_runtime_state_or_default();
-    let payload = api::build_mount_stats_payload(&state);
-    print_json(&payload, "mount stats payload")
-}
-
-pub fn handle_api_mount_topology(cli: &Cli) -> Result<()> {
-    let config = load_effective_config(cli)?;
-    let state = load_runtime_state_or_default();
-    let payload = api::build_mount_topology_payload(&config, &state);
-    print_json(&payload, "mount topology payload")
+fn print_json<T: serde::Serialize>(payload: &T, description: &str) -> Result<()> {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(payload)
+            .with_context(|| format!("Failed to serialize {description}"))?
+    );
+    Ok(())
 }
 
 pub fn handle_api_partitions(cli: &Cli) -> Result<()> {
@@ -44,20 +38,7 @@ pub fn handle_api_partitions(cli: &Cli) -> Result<()> {
     print_json(&payload, "partitions payload")
 }
 
-pub fn handle_api_lkm(cli: &Cli) -> Result<()> {
-    let config = load_effective_config(cli)?;
-    let payload = api::build_lkm_payload(&config);
-    print_json(&payload, "LKM payload")
-}
-
 pub fn handle_api_features() -> Result<()> {
     let payload = api::build_features_payload();
     print_json(&payload, "features payload")
-}
-
-pub fn handle_api_hooks(cli: &Cli) -> Result<()> {
-    let config = load_effective_config(cli)?;
-    require_live_kasumi(&config, "read Kasumi hooks")?;
-    println!("{}", kasumi_mount::hook_lines()?.join("\n"));
-    Ok(())
 }

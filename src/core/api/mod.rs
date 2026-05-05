@@ -20,7 +20,7 @@ mod topology;
 pub use self::{
     error::print_json_error,
     kasumi::{
-        LkmPayload, build_features_payload, build_kasumi_version_payload, build_lkm_payload,
+        build_features_payload, build_kasumi_version_payload, build_lkm_payload,
         parse_kasumi_rule_listing,
     },
     system::{build_mount_stats_payload, build_partitions_payload, build_storage_payload},

@@ -153,7 +153,17 @@ pub struct KasumiRuntimeInfo {
     pub mirror_path: PathBuf,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DaemonRuntimeInfo {
+    #[serde(default)]
+    pub alive: bool,
+    #[serde(default)]
+    pub socket_path: String,
+    #[serde(default)]
+    pub last_refresh_ts: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RuntimeState {
     pub timestamp: u64,
     pub pid: u32,
@@ -179,6 +189,8 @@ pub struct RuntimeState {
     pub mode_stats: ModuleModeStats,
     #[serde(default)]
     pub kasumi: KasumiRuntimeInfo,
+    #[serde(default)]
+    pub daemon: DaemonRuntimeInfo,
 }
 
 impl RuntimeState {
@@ -221,6 +233,7 @@ impl RuntimeState {
             mount_stats,
             mode_stats,
             kasumi,
+            daemon: DaemonRuntimeInfo::default(),
         };
 
         crate::scoped_log!(
@@ -255,6 +268,29 @@ impl RuntimeState {
             defs::STATE_FILE,
             json.len()
         );
+        if self.mount_error_modules.is_empty() {
+            crate::scoped_log!(
+                info,
+                "runtime_state:summary",
+                "saved: storage_mode={}, active_mounts={}, kasumi_modules={}, mount_errors=0, daemon_alive={}",
+                self.storage_mode,
+                self.active_mounts.join(","),
+                self.kasumi_modules.join(","),
+                self.daemon.alive
+            );
+        } else {
+            crate::scoped_log!(
+                warn,
+                "runtime_state:summary",
+                "saved: storage_mode={}, active_mounts={}, kasumi_modules={}, mount_errors={}, reasons={:?}, daemon_alive={}",
+                self.storage_mode,
+                self.active_mounts.join(","),
+                self.kasumi_modules.join(","),
+                self.mount_error_modules.join(","),
+                self.mount_error_reasons,
+                self.daemon.alive
+            );
+        }
         Ok(())
     }
 
@@ -304,6 +340,7 @@ impl RuntimeState {
         state.mount_error_reasons = previous_state.mount_error_reasons;
         clear_recovered_mount_errors(&mut state);
         state.skip_mount_modules = collect_skip_mount_modules(config);
+        state.daemon = previous_state.daemon;
 
         crate::scoped_log!(
             debug,
@@ -324,6 +361,16 @@ impl RuntimeState {
             .chain(self.kasumi_modules.iter())
             .map(|s| s.as_str())
             .collect()
+    }
+
+    pub fn set_daemon_state(&mut self, alive: bool, socket_path: impl Into<String>) {
+        let refreshed_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        self.daemon.alive = alive;
+        self.daemon.socket_path = socket_path.into();
+        self.daemon.last_refresh_ts = refreshed_at;
     }
 
     pub fn load() -> Result<Self> {

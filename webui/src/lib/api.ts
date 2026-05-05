@@ -40,6 +40,7 @@ interface RuntimeStatePayload {
   tmpfs_xattr_supported?: unknown;
   mode_stats?: unknown;
   kasumi?: unknown;
+  daemon?: unknown;
 }
 
 interface RuntimeModeStatsPayload {
@@ -192,6 +193,20 @@ function isNumber(value: unknown): value is number {
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(isString);
 }
+
+async function runHybridMountJson(args: string): Promise<unknown> {
+  const raw = await runCommandExpectOk(`${PATHS.BINARY} ${args}`);
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch (error) {
+    throw new AppError(
+      error instanceof Error
+        ? `Failed to parse hybrid-mount JSON output: ${error.message}`
+        : "Failed to parse hybrid-mount JSON output",
+    );
+  }
+}
+
 
 function toNonNegativeInt(value: unknown, fallback = 0): number {
   if (isNumber(value)) {
@@ -518,20 +533,11 @@ mv "${shellEscapeDoubleQuoted(tmpPath)}" "${shellEscapeDoubleQuoted(path)}"`,
 }
 
 async function loadRuntimeState(): Promise<RuntimeStatePayload> {
-  const raw = await readOptionalTextFile(PATHS.DAEMON_STATE);
-  if (!raw || !raw.trim()) {
-    return {};
+  const direct = await runHybridMountJson("daemon status");
+  if (!isRecord(direct)) {
+    throw new AppError("daemon status returned invalid payload");
   }
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return isRecord(parsed) ? (parsed as RuntimeStatePayload) : {};
-  } catch (error) {
-    throw new AppError(
-      error instanceof Error
-        ? `Failed to parse runtime state: ${error.message}`
-        : "Failed to parse runtime state",
-    );
-  }
+  return direct as RuntimeStatePayload;
 }
 
 async function readKernelRelease(): Promise<string> {
@@ -661,13 +667,6 @@ function buildMountedCount(
   return total > 0 ? total : modeStats.overlay + modeStats.magic + modeStats.kasumi;
 }
 
-function parseJsonArrayOutput(output: string, endpoint: string): string[] {
-  try {
-    const parsed: unknown = JSON.parse(output);
-    if (isStringArray(parsed)) return parsed;
-  } catch {}
-  throw new AppError(`Invalid ${endpoint} payload`);
-}
 
 function buildKasumiStatusFromPayload(
   payload: unknown,
@@ -946,17 +945,11 @@ const RealAPI: AppAPI = {
       loadConfigFromFile(),
       loadRuntimeState(),
     ]);
-    try {
-      const payload = JSON.parse(
-        await runCommandExpectOk(`${PATHS.BINARY} kasumi status`),
-      ) as unknown;
-      return (
-        buildKasumiStatusFromPayload(payload, config.kasumi, state) ??
-        buildKasumiStatusFromRuntimeState(config.kasumi, state)
-      );
-    } catch {
-      return buildKasumiStatusFromRuntimeState(config.kasumi, state);
-    }
+    const payload = await runHybridMountJson("kasumi status");
+    return (
+      buildKasumiStatusFromPayload(payload, config.kasumi, state) ??
+      buildKasumiStatusFromRuntimeState(config.kasumi, state)
+    );
   },
   setKasumiEnabled: async (enabled: boolean): Promise<void> => {
     await mutateConfig((config) => {
@@ -1075,10 +1068,11 @@ const RealAPI: AppAPI = {
     });
   },
   getUserHideRules: async (): Promise<string[]> => {
-    return parseJsonArrayOutput(
-      await runCommandExpectOk(`${PATHS.BINARY} hide list`),
-      "hide list",
-    );
+    const payload = await runHybridMountJson("hide list");
+    if (isStringArray(payload)) {
+      return payload;
+    }
+    throw new AppError("hide list returned invalid payload");
   },
   addUserHideRule: async (path: string): Promise<void> => {
     await runCommandExpectOk(

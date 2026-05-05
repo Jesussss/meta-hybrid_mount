@@ -43,6 +43,10 @@ pub enum Commands {
         #[command(subcommand)]
         command: ApiCommands,
     },
+    Daemon {
+        #[command(subcommand)]
+        command: DaemonCommands,
+    },
     Lkm {
         #[command(subcommand)]
         command: LkmCommands,
@@ -110,6 +114,12 @@ pub enum ApiCommands {
     Lkm,
     Features,
     Hooks,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum DaemonCommands {
+    Ping,
+    Status,
 }
 
 #[derive(Subcommand, Debug)]
