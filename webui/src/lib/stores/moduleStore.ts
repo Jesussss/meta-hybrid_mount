@@ -1,9 +1,9 @@
 import { createSignal, createMemo, createRoot } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
+import { API } from "../api";
 import { normalizeModuleMode } from "../moduleMode";
 import { uiStore } from "./uiStore";
 import type { Module, ModeStats } from "../types";
-import { scanModules, saveModules } from "../api/services/moduleService";
 
 const createModuleStore = () => {
   const [modules, setModulesStore] = createStore<Module[]>([]);
@@ -42,7 +42,7 @@ const createModuleStore = () => {
     setLoading(true);
     pendingLoad = (async () => {
       try {
-        const data = (await scanModules()).map((module) =>
+        const data = (await API.scanModules()).map((module) =>
           normalizeModule(module as Module),
         );
         setModulesStore(reconcile(data));
@@ -77,7 +77,7 @@ const createModuleStore = () => {
   async function saveCurrentModules() {
     setSaving(true);
     try {
-      await saveModules(modules);
+      await API.saveModules(modules);
       uiStore.showToast(uiStore.L.common?.saved || "Saved", "success");
       return true;
     } catch (e: any) {

@@ -6,7 +6,7 @@ import { kasumiStore } from "../lib/stores/kasumiStore";
 import { ICONS } from "../lib/constants";
 import Skeleton from "../components/Skeleton";
 import BottomActions from "../components/BottomActions";
-import { reboot } from "../lib/api/services/systemService";
+import { API } from "../lib/api";
 import "./StatusTab.css";
 
 import "@material/web/iconbutton/filled-tonal-icon-button.js";
@@ -81,7 +81,7 @@ export default function StatusTab() {
               onClick={async () => {
                 setShowRebootConfirm(false);
                 try {
-                  await reboot();
+                  await API.reboot();
                 } catch (error) {
                   uiStore.showToast(
                     error instanceof Error

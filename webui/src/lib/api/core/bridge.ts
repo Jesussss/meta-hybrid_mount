@@ -25,7 +25,7 @@ if (hasKsuBridge()) {
   } catch {}
 }
 
-export const shouldUseMock = import.meta.env.DEV && !ksuExec;
+export const shouldUseMock = import.meta.env.MODE === "test";
 export const defaultVersion = APP_VERSION;
 export const hasExecBridge = Boolean(ksuExec);
 
@@ -45,13 +45,23 @@ export async function runCommandExpectOk(command: string): Promise<string> {
   throw new AppError(stderr || `command failed: ${command}`, errno);
 }
 
-export async function runHybridMountJson(
-  args: string,
-  binaryPath: string,
-): Promise<unknown> {
-  const raw = await runCommandExpectOk(`${binaryPath} ${args}`);
+function getStructuredError(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+
+  const record = payload as Record<string, unknown>;
+  if (record.type === "error" && typeof record.error === "string") {
+    return record.error;
+  }
+  if (record.ok === false && typeof record.error === "string") {
+    return record.error;
+  }
+  return null;
+}
+
+export function parseHybridMountJsonOutput(raw: string): unknown {
+  let payload: unknown;
   try {
-    return JSON.parse(raw) as unknown;
+    payload = JSON.parse(raw) as unknown;
   } catch (error) {
     throw new AppError(
       error instanceof Error
@@ -59,4 +69,19 @@ export async function runHybridMountJson(
         : "Failed to parse hybrid-mount JSON output",
     );
   }
+
+  const structuredError = getStructuredError(payload);
+  if (structuredError) {
+    throw new AppError(structuredError);
+  }
+
+  return payload;
+}
+
+export async function runHybridMountJson(
+  args: string,
+  binaryPath: string,
+): Promise<unknown> {
+  const raw = await runCommandExpectOk(`${binaryPath} ${args}`);
+  return parseHybridMountJsonOutput(raw);
 }
