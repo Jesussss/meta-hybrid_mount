@@ -516,7 +516,7 @@ fn cstring_from_path(path: &Path) -> Result<CString> {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn lock_error(name: &str) -> anyhow::Error {
-    anyhow!("failed to lock Kasumi {name} mutex")
+    anyhow::anyhow!("failed to lock Kasumi {name} mutex")
 }
 
 fn write_bytes_into_c_buf(buf: &mut [c_char], bytes: &[u8], field_name: &str) -> Result<()> {
