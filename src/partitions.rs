@@ -16,6 +16,8 @@ use std::{collections::HashSet, fs, path::Path};
 
 use crate::defs;
 
+const SYSTEM_PARTITION: &str = "system";
+
 fn partition_root_exists(name: &str) -> bool {
     fs::symlink_metadata(Path::new("/").join(name)).is_ok()
 }
@@ -25,13 +27,13 @@ pub fn discover_partition_names(_moduledir: &Path, extra_partitions: &[String]) 
         debug,
         "partitions:discover",
         "start: managed_candidates={}, extra_candidates={}",
-        defs::MANAGED_PARTITIONS.len(),
+        defs::MANAGED_PARTITIONS.len() + 1,
         extra_partitions.len()
     );
 
-    let mut names = defs::MANAGED_PARTITIONS
-        .iter()
-        .copied()
+    let mut names = [SYSTEM_PARTITION]
+        .into_iter()
+        .chain(defs::MANAGED_PARTITIONS.iter().copied())
         .filter(|partition| partition_root_exists(partition))
         .map(str::to_string)
         .collect::<Vec<_>>();

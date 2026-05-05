@@ -47,11 +47,24 @@ pub const IGNORE_UNMOUNT_PARTITIONS: &[&str] = &[
 ];
 
 pub const MANAGED_PARTITIONS: &[&str] = &[
-    "system",
-    "vendor",
+    "odm",
     "product",
     "system_ext",
-    "odm",
-    "oem",
+    "vendor",
     "apex",
+    "mi_ext",
+    "my_bigball",
+    "my_carrier",
+    "my_company",
+    "my_engineering",
+    "my_heytap",
+    "my_manifest",
+    "my_preload",
+    "my_product",
+    "my_region",
+    "my_reserve",
+    "my_stock",
+    "oem",
+    "optics",
+    "prism",
 ];
