@@ -41,6 +41,7 @@ RUN apt-get update \
     file \
     gcc-multilib \
     git \
+    jq \
     libclang-dev \
     libssl-dev \
     llvm \
@@ -72,6 +73,7 @@ RUN curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs \
 RUN rustc +${RUST_TOOLCHAIN} --version \
   && cargo +${RUST_TOOLCHAIN} --version \
   && cargo ndk --version \
+  && jq --version \
   && node --version \
   && pnpm --version \
   && "${ANDROID_NDK_HOME}/ndk-build" --version

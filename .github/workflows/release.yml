@@ -134,6 +134,18 @@ jobs:
           }
           EOF
 
+      - name: Ensure jq for git-cliff
+        run: |
+          set -euo pipefail
+          if command -v jq >/dev/null 2>&1; then
+            jq --version
+            exit 0
+          fi
+          apt-get update
+          apt-get install -y --no-install-recommends jq
+          rm -rf /var/lib/apt/lists/*
+          jq --version
+
       - name: Generate Changelog
         id: git-cliff
         uses: orhun/git-cliff-action@v4
