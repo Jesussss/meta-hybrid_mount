@@ -179,9 +179,6 @@ export function normalizeConfig(value: unknown): AppConfig {
     mountsource: isString(next.mountsource)
       ? next.mountsource
       : DEFAULT_CONFIG.mountsource,
-    partitions: Array.isArray(next.partitions)
-      ? next.partitions.filter(isString)
-      : [...DEFAULT_CONFIG.partitions],
     overlay_mode: normalizeOverlayMode(next.overlay_mode),
     disable_umount: isBoolean(next.disable_umount)
       ? next.disable_umount

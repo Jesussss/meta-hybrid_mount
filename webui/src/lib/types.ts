@@ -8,7 +8,6 @@ export type OverlayMode = "tmpfs" | "ext4";
 export interface AppConfig {
   moduledir: string;
   mountsource: string;
-  partitions: string[];
   overlay_mode: OverlayMode;
   disable_umount: boolean;
   enable_overlay_fallback: boolean;

@@ -22,7 +22,6 @@ export async function saveConfigToFile(config: AppConfig): Promise<void> {
   await patchConfigFile({
     moduledir: normalized.moduledir,
     mountsource: normalized.mountsource,
-    partitions: [...normalized.partitions],
     overlay_mode: normalized.overlay_mode,
     disable_umount: normalized.disable_umount,
     enable_overlay_fallback: normalized.enable_overlay_fallback,

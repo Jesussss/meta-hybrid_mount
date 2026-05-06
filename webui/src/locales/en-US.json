@@ -36,8 +36,6 @@
     "moduleDirDesc": "Set the directory where modules are stored",
     "mountSource": "Mount Source",
     "mountSourceDesc": "Global mount source namespace (e.g. KSU)",
-    "partitions": "Partitions",
-    "partitionsDesc": "Add partitions to mount",
     "reload": "Reload",
     "save": "Save",
     "resetConfig": "Reset Config",

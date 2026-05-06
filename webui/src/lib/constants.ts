@@ -4,7 +4,6 @@ import type { AppConfig } from "./types";
 export const DEFAULT_CONFIG: AppConfig = {
   moduledir: "/data/adb/modules",
   mountsource: "KSU",
-  partitions: [],
   disable_umount: false,
   enable_overlay_fallback: false,
   overlay_mode: "tmpfs",

@@ -22,13 +22,12 @@ fn partition_root_exists(name: &str) -> bool {
     fs::symlink_metadata(Path::new("/").join(name)).is_ok()
 }
 
-pub fn managed_partition_names(extra_partitions: &[String]) -> Vec<String> {
+pub fn managed_partition_names() -> Vec<String> {
     crate::scoped_log!(
         debug,
         "partitions:discover",
-        "start: managed_candidates={}, extra_candidates={}",
+        "start: managed_candidates={}",
         defs::MANAGED_PARTITIONS.len() + 1,
-        extra_partitions.len()
     );
 
     let mut names = [SYSTEM_PARTITION]
@@ -37,13 +36,6 @@ pub fn managed_partition_names(extra_partitions: &[String]) -> Vec<String> {
         .filter(|partition| partition_root_exists(partition))
         .map(str::to_string)
         .collect::<Vec<_>>();
-
-    names.extend(
-        extra_partitions
-            .iter()
-            .filter(|partition| partition_root_exists(partition))
-            .cloned(),
-    );
 
     names.sort();
     names.dedup();
@@ -58,10 +50,8 @@ pub fn managed_partition_names(extra_partitions: &[String]) -> Vec<String> {
     names
 }
 
-pub fn managed_partition_set(extra_partitions: &[String]) -> HashSet<String> {
-    managed_partition_names(extra_partitions)
-        .into_iter()
-        .collect()
+pub fn managed_partition_set() -> HashSet<String> {
+    managed_partition_names().into_iter().collect()
 }
 
 #[cfg(test)]
@@ -70,23 +60,10 @@ mod tests {
 
     #[test]
     fn only_keep_existing_root_partitions() {
-        let partitions = managed_partition_names(&[]);
+        let partitions = managed_partition_names();
 
         for name in &partitions {
             assert!(partition_root_exists(name));
         }
-    }
-
-    #[test]
-    fn extra_partitions_require_existing_root() {
-        let extras = vec![
-            "tmp".to_string(),
-            "__definitely_not_a_real_partition__".to_string(),
-        ];
-
-        let partitions = managed_partition_names(&extras);
-
-        assert!(partitions.contains(&"tmp".to_string()));
-        assert!(!partitions.contains(&"__definitely_not_a_real_partition__".to_string()));
     }
 }

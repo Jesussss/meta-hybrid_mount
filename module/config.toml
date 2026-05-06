@@ -14,7 +14,6 @@
 
 moduledir = "/data/adb/modules"
 mountsource = "KSU"
-partitions = []
 overlay_mode = "ext4"
 disable_umount = false
 enable_overlay_fallback = false

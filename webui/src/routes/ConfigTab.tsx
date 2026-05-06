@@ -7,7 +7,6 @@ import { moduleStore } from "../lib/stores/moduleStore";
 import { ICONS } from "../lib/constants";
 import { setKasumiEnabled } from "../lib/api/services/kasumiService";
 import { getCookie, setCookie } from "../lib/cookies";
-import ChipInput from "../components/ChipInput";
 import "./ConfigTab.css";
 import "@material/web/textfield/outlined-text-field.js";
 import "@material/web/icon/icon.js";
@@ -73,15 +72,6 @@ export default function ConfigTab() {
     const saved = await saveCurrentConfig();
     if (saved && key === "moduledir") {
       await refreshModulesForConfigChange();
-    }
-  }
-
-  async function handlePartitionsChange(vals: string[]) {
-    const prev = [...configStore.config.partitions];
-    updateConfig("partitions", vals);
-    const saved = await saveCurrentConfig();
-    if (!saved) {
-      updateConfig("partitions", prev);
     }
   }
 
@@ -293,34 +283,6 @@ export default function ConfigTab() {
               <div class="card-icon">
                 <md-icon>
                   <svg viewBox="0 0 24 24">
-                    <path d={ICONS.storage} />
-                  </svg>
-                </md-icon>
-              </div>
-              <div class="card-text">
-                <span class="card-title">{uiStore.L.config.partitions}</span>
-                <span class="card-desc">
-                  {uiStore.L.config?.partitionsDesc ??
-                    "Add partitions to mount"}
-                </span>
-              </div>
-            </div>
-            <div class="p-input">
-              <ChipInput
-                values={configStore.config.partitions}
-                placeholder="e.g. product, system_ext..."
-                onValuesChange={(vals) => handlePartitionsChange(vals)}
-              />
-            </div>
-          </div>
-        </section>
-
-        <section class="config-group">
-          <div class="config-card">
-            <div class="card-header">
-              <div class="card-icon">
-                <md-icon>
-                  <svg viewBox="0 0 24 24">
                     <path d={ICONS.save} />
                   </svg>
                 </md-icon>
@@ -418,33 +380,31 @@ export default function ConfigTab() {
           <div class="options-grid">
             <button
               class={`option-tile clickable secondary ${kasumiStore.enabled ? "active" : ""}`}
-              onClick={handleKasumiToggle}
-              disabled={kasumiPending() || kasumiStore.loading}
-              type="button"
+              onClick={() => {
+                if (!kasumiPending()) {
+                  void handleKasumiToggle();
+                }
+              }}
+              disabled={kasumiPending()}
               aria-pressed={kasumiStore.enabled}
-              aria-label={
-                uiStore.L.config?.kasumiMasterSwitch || "Enable Kasumi"
-              }
             >
               <md-ripple></md-ripple>
               <div class="tile-top">
                 <div class="tile-icon">
                   <md-icon>
                     <svg viewBox="0 0 24 24">
-                      <path
-                        d={
-                          kasumiStore.enabled
-                            ? ICONS.snowflake_filled
-                            : ICONS.snowflake
-                        }
-                      />
+                      <path d={ICONS.cat_paw} />
                     </svg>
                   </md-icon>
                 </div>
               </div>
               <div class="tile-bottom">
                 <span class="tile-label">
-                  {uiStore.L.config?.kasumiMasterTitle ?? "Experimental Kasumi"}
+                  {uiStore.L.config?.kasumiToggle ?? "Enable Kasumi"}
+                </span>
+                <span class="tile-desc">
+                  {uiStore.L.config?.kasumiToggleDesc ??
+                    "Expose the Kasumi tab and allow Kasumi-backed routing."}
                 </span>
               </div>
             </button>

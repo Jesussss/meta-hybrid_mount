@@ -20,11 +20,11 @@ describe("parseHybridMountJsonOutput", () => {
   it("parses daemon config payloads", () => {
     expect(
       parseHybridMountJsonOutput(
-        '{"moduledir":"/data/adb/modules","partitions":[]}',
+        '{"moduledir":"/data/adb/modules","overlay_mode":"tmpfs"}',
       ),
     ).toEqual({
       moduledir: "/data/adb/modules",
-      partitions: [],
+      overlay_mode: "tmpfs",
     });
   });
 

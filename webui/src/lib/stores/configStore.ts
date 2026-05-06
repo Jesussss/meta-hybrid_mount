@@ -16,9 +16,6 @@ function normalizeConfig(
   return {
     moduledir: nextConfig?.moduledir ?? DEFAULT_CONFIG.moduledir,
     mountsource: nextConfig?.mountsource ?? DEFAULT_CONFIG.mountsource,
-    partitions: Array.isArray(nextConfig?.partitions)
-      ? [...nextConfig.partitions]
-      : [...DEFAULT_CONFIG.partitions],
     overlay_mode: nextConfig?.overlay_mode ?? DEFAULT_CONFIG.overlay_mode,
     disable_umount: nextConfig?.disable_umount ?? DEFAULT_CONFIG.disable_umount,
     enable_overlay_fallback:

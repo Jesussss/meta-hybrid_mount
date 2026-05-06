@@ -14,7 +14,6 @@
 
 use std::{collections::HashMap, path::PathBuf};
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -194,8 +193,6 @@ pub struct Config {
     pub moduledir: PathBuf,
     #[serde(default = "default_mountsource")]
     pub mountsource: String,
-    #[serde(default, deserialize_with = "deserialize_partitions_flexible")]
-    pub partitions: Vec<String>,
     #[serde(default)]
     pub overlay_mode: OverlayMode,
     #[serde(default)]
@@ -230,33 +227,11 @@ fn default_true() -> bool {
     true
 }
 
-fn deserialize_partitions_flexible<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum StringOrVec {
-        String(String),
-        Vec(Vec<String>),
-    }
-
-    match StringOrVec::deserialize(deserializer)? {
-        StringOrVec::Vec(v) => Ok(v),
-        StringOrVec::String(s) => Ok(s
-            .split(',')
-            .map(|item| item.trim().to_string())
-            .filter(|item| !item.is_empty())
-            .collect()),
-    }
-}
-
 impl Default for Config {
     fn default() -> Self {
         Self {
             moduledir: default_moduledir(),
             mountsource: default_mountsource(),
-            partitions: Vec::new(),
             overlay_mode: OverlayMode::default(),
             disable_umount: false,
             enable_overlay_fallback: false,
@@ -264,47 +239,5 @@ impl Default for Config {
             kasumi: KasumiConfig::default(),
             rules: HashMap::new(),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn partitions_from_comma_separated_string() {
-        let config: Config = toml::from_str(r#"partitions = "system,vendor,product""#).unwrap();
-        assert_eq!(config.partitions, vec!["system", "vendor", "product"]);
-    }
-
-    #[test]
-    fn partitions_from_array() {
-        let config: Config =
-            toml::from_str(r#"partitions = ["system", "vendor", "product"]"#).unwrap();
-        assert_eq!(config.partitions, vec!["system", "vendor", "product"]);
-    }
-
-    #[test]
-    fn partitions_string_with_spaces() {
-        let config: Config = toml::from_str(r#"partitions = "system, vendor , product""#).unwrap();
-        assert_eq!(config.partitions, vec!["system", "vendor", "product"]);
-    }
-
-    #[test]
-    fn partitions_empty_string() {
-        let config: Config = toml::from_str(r#"partitions = """#).unwrap();
-        assert!(config.partitions.is_empty());
-    }
-
-    #[test]
-    fn partitions_empty_array() {
-        let config: Config = toml::from_str(r#"partitions = []"#).unwrap();
-        assert!(config.partitions.is_empty());
-    }
-
-    #[test]
-    fn partitions_default_when_missing() {
-        let config: Config = toml::from_str("").unwrap();
-        assert!(config.partitions.is_empty());
     }
 }

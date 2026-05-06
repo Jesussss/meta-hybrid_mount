@@ -36,8 +36,6 @@
     "moduleDirDesc": "モジュールを保存するディレクトリを設定します",
     "mountSource": "マウントソース",
     "mountSourceDesc": "グローバルマウントソースの名前空間 (例: KSU)",
-    "partitions": "パーティション",
-    "partitionsDesc": "マウントするパーティションを追加",
     "reload": "再読み込み",
     "save": "保存",
     "resetConfig": "設定をリセット",

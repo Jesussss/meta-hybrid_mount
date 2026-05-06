@@ -36,8 +36,6 @@
     "moduleDirDesc": "Đặt thư mục nơi các mô-đun được lưu trữ",
     "mountSource": "Nguồn Gắn kết",
     "mountSourceDesc": "Không gian tên nguồn gắn kết toàn cầu (ví dụ: KSU)",
-    "partitions": "Phân vùng",
-    "partitionsDesc": "Thêm phân vùng để gắn kết",
     "reload": "Tải lại",
     "save": "Lưu",
     "resetConfig": "Đặt lại Cấu hình",

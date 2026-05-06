@@ -36,8 +36,6 @@
     "moduleDirDesc": "設定模組儲存目錄",
     "mountSource": "掛載來源",
     "mountSourceDesc": "全域掛載來源命名空間 (例如 KSU)",
-    "partitions": "額外分區",
-    "partitionsDesc": "新增要掛載的分區",
     "reload": "重載",
     "save": "儲存",
     "resetConfig": "重置設定檔",

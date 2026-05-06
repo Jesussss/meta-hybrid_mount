@@ -36,8 +36,6 @@
     "moduleDirDesc": "设置模块储存的路径",
     "mountSource": "挂载源名",
     "mountSourceDesc": "全局挂载源命名空间 (例如 KSU)",
-    "partitions": "额外分区",
-    "partitionsDesc": "添加额外挂载分区",
     "reload": "重载",
     "save": "保存",
     "resetConfig": "重置配置文件",

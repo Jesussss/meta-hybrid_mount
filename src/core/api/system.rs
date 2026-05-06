@@ -192,11 +192,11 @@ fn statvfs_usage(path: &std::path::Path) -> Result<(u64, u64, u64, f64)> {
     Ok((total_bytes, used_bytes, free_bytes, percent))
 }
 
-fn detect_partitions(config: &Config) -> Result<Vec<PartitionInfo>> {
+fn detect_partitions(_config: &Config) -> Result<Vec<PartitionInfo>> {
     let mount_entries = read_mount_entries()?;
     let mut partitions = Vec::new();
 
-    for name in partitions::managed_partition_names(&config.partitions) {
+    for name in partitions::managed_partition_names() {
         let mount_point = PathBuf::from("/").join(&name);
         let metadata = match fs::symlink_metadata(&mount_point) {
             Ok(metadata) => metadata,

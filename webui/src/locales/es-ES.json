@@ -36,8 +36,6 @@
     "moduleDirDesc": "Establece el directorio donde se almacenan los módulos",
     "mountSource": "Fuente Montaje",
     "mountSourceDesc": "Espacio de nombres global (p. ej. KSU)",
-    "partitions": "Particiones",
-    "partitionsDesc": "Añade particiones para montar",
     "reload": "Recargar",
     "save": "Guardar",
     "resetConfig": "Restablecer Config",
