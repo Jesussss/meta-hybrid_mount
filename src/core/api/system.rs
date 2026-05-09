@@ -98,6 +98,14 @@ struct MountEntry {
     is_read_only: bool,
 }
 
+fn storage_mode_label(storage_mode: &str) -> String {
+    if storage_mode.is_empty() {
+        "unknown".to_string()
+    } else {
+        storage_mode.to_string()
+    }
+}
+
 pub fn build_storage_payload(state: &RuntimeState) -> StorageInfo {
     let mount_path = state.mount_point.clone();
     let path_str = mount_path.display().to_string();
@@ -112,11 +120,7 @@ pub fn build_storage_payload(state: &RuntimeState) -> StorageInfo {
             used: None,
             avail: None,
             percent: None,
-            mode: state
-                .storage_mode
-                .is_empty()
-                .then_some("unknown".to_string())
-                .or_else(|| Some(state.storage_mode.clone())),
+            mode: Some(storage_mode_label(&state.storage_mode)),
         };
     }
 
@@ -130,11 +134,7 @@ pub fn build_storage_payload(state: &RuntimeState) -> StorageInfo {
             used: Some(format_human_size(used_bytes, WINDOWS)),
             avail: Some(format_human_size(free_bytes, WINDOWS)),
             percent: Some(percent),
-            mode: Some(if state.storage_mode.is_empty() {
-                "unknown".to_string()
-            } else {
-                state.storage_mode.clone()
-            }),
+            mode: Some(storage_mode_label(&state.storage_mode)),
         },
         Err(err) => StorageInfo {
             path: path_str,
@@ -145,11 +145,7 @@ pub fn build_storage_payload(state: &RuntimeState) -> StorageInfo {
             used: None,
             avail: None,
             percent: None,
-            mode: Some(if state.storage_mode.is_empty() {
-                "unknown".to_string()
-            } else {
-                state.storage_mode.clone()
-            }),
+            mode: Some(storage_mode_label(&state.storage_mode)),
         },
     }
 }

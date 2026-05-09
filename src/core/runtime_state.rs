@@ -200,7 +200,10 @@ impl RuntimeState {
         if self.cached_status_value.is_none() {
             self.cached_status_value = Some(serde_json::to_value(&*self)?);
         }
-        Ok(self.cached_status_value.as_ref().unwrap())
+        Ok(self
+            .cached_status_value
+            .as_ref()
+            .expect("cached_status_value was just populated above"))
     }
 
     fn invalidate_cache(&mut self) {
@@ -269,13 +272,18 @@ impl RuntimeState {
     }
 
     pub fn save(&self) -> Result<()> {
+        let json = serde_json::to_string_pretty(self)?;
+        if let Ok(existing) = std::fs::read_to_string(defs::STATE_FILE) {
+            if existing == json {
+                return Ok(());
+            }
+        }
         crate::scoped_log!(
             debug,
             "runtime_state:save",
             "start: path={}",
             defs::STATE_FILE
         );
-        let json = serde_json::to_string_pretty(self)?;
         atomic_write(defs::STATE_FILE, json.as_bytes())?;
         crate::scoped_log!(
             debug,

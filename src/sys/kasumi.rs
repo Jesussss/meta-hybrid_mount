@@ -15,7 +15,6 @@
 use std::{
     ffi::{CString, c_char, c_int, c_ulong, c_void},
     fs,
-    mem::size_of,
     os::{
         fd::BorrowedFd,
         unix::{
@@ -88,6 +87,24 @@ impl uapi::kasumi_syscall_arg {
 
 pub type KasumiSyscallListArg = uapi::kasumi_syscall_list_arg;
 
+macro_rules! impl_zeroed_default {
+    ($t:ty) => {
+        impl Default for $t {
+            fn default() -> Self {
+                unsafe { std::mem::zeroed() }
+            }
+        }
+    };
+}
+
+macro_rules! uname_setter {
+    ($method:ident, $field:ident, $label:literal) => {
+        pub fn $method(&mut self, value: &str) -> Result<()> {
+            write_str_into_c_buf(&mut self.$field, value, concat!("Kasumi uname ", $label))
+        }
+    };
+}
+
 pub type KasumiUidListArg = uapi::kasumi_uid_list_arg;
 
 impl uapi::kasumi_uid_list_arg {
@@ -106,28 +123,7 @@ impl uapi::kasumi_uid_list_arg {
 
 pub type KasumiSpoofKstat = uapi::kasumi_spoof_kstat;
 
-impl Default for uapi::kasumi_spoof_kstat {
-    fn default() -> Self {
-        Self {
-            target_ino: 0,
-            target_pathname: [0; uapi::KSM_MAX_LEN_PATHNAME as usize],
-            spoofed_ino: 0,
-            spoofed_dev: 0,
-            spoofed_nlink: 0,
-            spoofed_size: 0,
-            spoofed_atime_sec: 0,
-            spoofed_atime_nsec: 0,
-            spoofed_mtime_sec: 0,
-            spoofed_mtime_nsec: 0,
-            spoofed_ctime_sec: 0,
-            spoofed_ctime_nsec: 0,
-            spoofed_blksize: 0,
-            spoofed_blocks: 0,
-            is_static: 0,
-            err: 0,
-        }
-    }
-}
+impl_zeroed_default!(uapi::kasumi_spoof_kstat);
 
 impl uapi::kasumi_spoof_kstat {
     pub fn new(target_ino: c_ulong, target_pathname: impl AsRef<Path>) -> Result<Self> {
@@ -150,56 +146,20 @@ impl uapi::kasumi_spoof_kstat {
 
 pub type KasumiSpoofUname = uapi::kasumi_spoof_uname;
 
-impl Default for uapi::kasumi_spoof_uname {
-    fn default() -> Self {
-        Self {
-            sysname: [0; uapi::KSM_UNAME_LEN as usize],
-            nodename: [0; uapi::KSM_UNAME_LEN as usize],
-            release: [0; uapi::KSM_UNAME_LEN as usize],
-            version: [0; uapi::KSM_UNAME_LEN as usize],
-            machine: [0; uapi::KSM_UNAME_LEN as usize],
-            domainname: [0; uapi::KSM_UNAME_LEN as usize],
-            err: 0,
-        }
-    }
-}
+impl_zeroed_default!(uapi::kasumi_spoof_uname);
 
 impl uapi::kasumi_spoof_uname {
-    pub fn set_sysname(&mut self, value: &str) -> Result<()> {
-        write_str_into_c_buf(&mut self.sysname, value, "Kasumi uname sysname")
-    }
-
-    pub fn set_nodename(&mut self, value: &str) -> Result<()> {
-        write_str_into_c_buf(&mut self.nodename, value, "Kasumi uname nodename")
-    }
-
-    pub fn set_release(&mut self, value: &str) -> Result<()> {
-        write_str_into_c_buf(&mut self.release, value, "Kasumi uname release")
-    }
-
-    pub fn set_version(&mut self, value: &str) -> Result<()> {
-        write_str_into_c_buf(&mut self.version, value, "Kasumi uname version")
-    }
-
-    pub fn set_machine(&mut self, value: &str) -> Result<()> {
-        write_str_into_c_buf(&mut self.machine, value, "Kasumi uname machine")
-    }
-
-    pub fn set_domainname(&mut self, value: &str) -> Result<()> {
-        write_str_into_c_buf(&mut self.domainname, value, "Kasumi uname domainname")
-    }
+    uname_setter!(set_sysname, sysname, "sysname");
+    uname_setter!(set_nodename, nodename, "nodename");
+    uname_setter!(set_release, release, "release");
+    uname_setter!(set_version, version, "version");
+    uname_setter!(set_machine, machine, "machine");
+    uname_setter!(set_domainname, domainname, "domainname");
 }
 
 pub type KasumiSpoofCmdline = uapi::kasumi_spoof_cmdline;
 
-impl Default for uapi::kasumi_spoof_cmdline {
-    fn default() -> Self {
-        Self {
-            cmdline: [0; uapi::KSM_FAKE_CMDLINE_SIZE as usize],
-            err: 0,
-        }
-    }
-}
+impl_zeroed_default!(uapi::kasumi_spoof_cmdline);
 
 impl uapi::kasumi_spoof_cmdline {
     pub fn new(cmdline: &str) -> Result<Self> {
@@ -215,18 +175,7 @@ impl uapi::kasumi_spoof_cmdline {
 
 pub type KasumiMapsRule = uapi::kasumi_maps_rule;
 
-impl Default for uapi::kasumi_maps_rule {
-    fn default() -> Self {
-        Self {
-            target_ino: 0,
-            target_dev: 0,
-            spoofed_ino: 0,
-            spoofed_dev: 0,
-            spoofed_pathname: [0; uapi::KSM_MAX_LEN_PATHNAME as usize],
-            err: 0,
-        }
-    }
-}
+impl_zeroed_default!(uapi::kasumi_maps_rule);
 
 impl uapi::kasumi_maps_rule {
     pub fn new(
@@ -258,15 +207,7 @@ impl uapi::kasumi_maps_rule {
 
 pub type KasumiMountHideArg = uapi::kasumi_mount_hide_arg;
 
-impl Default for uapi::kasumi_mount_hide_arg {
-    fn default() -> Self {
-        Self {
-            enable: 0,
-            path_pattern: [0; uapi::KSM_MAX_LEN_PATHNAME as usize],
-            err: 0,
-        }
-    }
-}
+impl_zeroed_default!(uapi::kasumi_mount_hide_arg);
 
 impl uapi::kasumi_mount_hide_arg {
     pub fn new(enable: bool, path_pattern: Option<&Path>) -> Result<Self> {
@@ -291,15 +232,7 @@ impl uapi::kasumi_mount_hide_arg {
 
 pub type KasumiMapsSpoofArg = uapi::kasumi_maps_spoof_arg;
 
-impl Default for uapi::kasumi_maps_spoof_arg {
-    fn default() -> Self {
-        Self {
-            enable: 0,
-            reserved: [0; size_of::<KasumiMapsRule>()],
-            err: 0,
-        }
-    }
-}
+impl_zeroed_default!(uapi::kasumi_maps_spoof_arg);
 
 impl uapi::kasumi_maps_spoof_arg {
     pub fn new(enable: bool) -> Self {
@@ -312,16 +245,7 @@ impl uapi::kasumi_maps_spoof_arg {
 
 pub type KasumiStatfsSpoofArg = uapi::kasumi_statfs_spoof_arg;
 
-impl Default for uapi::kasumi_statfs_spoof_arg {
-    fn default() -> Self {
-        Self {
-            enable: 0,
-            path: [0; uapi::KSM_MAX_LEN_PATHNAME as usize],
-            spoof_f_type: 0,
-            err: 0,
-        }
-    }
-}
+impl_zeroed_default!(uapi::kasumi_statfs_spoof_arg);
 
 impl uapi::kasumi_statfs_spoof_arg {
     pub fn new(enable: bool) -> Self {
@@ -656,17 +580,22 @@ fn ioctl_error_context(name: &str, request: KasumiIoctlRequest, err: Errno) -> S
     )
 }
 
-fn ioctl_noarg(name: &str, request: KasumiIoctlRequest) -> Result<()> {
+fn ioctl_call(
+    name: &str,
+    request: KasumiIoctlRequest,
+    has_arg: bool,
+    run: impl FnOnce(BorrowedFd<'_>) -> rustix::io::Result<()>,
+) -> Result<()> {
     crate::scoped_log!(
         debug,
         "kasumi:ioctl",
-        "start: name={}, opcode=0x{:x}, has_arg=false",
+        "start: name={}, opcode=0x{:x}, has_arg={}",
         name,
-        request
+        request,
+        has_arg
     );
     let fd = unsafe { BorrowedFd::borrow_raw(fetch_anon_fd()?) };
-    let ioctl = KasumiIoctlNoArg::new(request);
-    match unsafe { ioctl::ioctl(fd, ioctl) } {
+    match run(fd) {
         Ok(()) => {
             crate::scoped_log!(
                 debug,
@@ -692,45 +621,27 @@ fn ioctl_noarg(name: &str, request: KasumiIoctlRequest) -> Result<()> {
     }
 }
 
+fn ioctl_noarg(name: &str, request: KasumiIoctlRequest) -> Result<()> {
+    ioctl_call(name, request, false, |fd| unsafe {
+        ioctl::ioctl(fd, KasumiIoctlNoArg::new(request))
+    })
+}
+
 fn ioctl_with_arg<T>(name: &str, request: KasumiIoctlRequest, arg: &mut T) -> Result<()> {
-    crate::scoped_log!(
-        debug,
-        "kasumi:ioctl",
-        "start: name={}, opcode=0x{:x}, has_arg=true",
-        name,
-        request
-    );
-    let fd = unsafe { BorrowedFd::borrow_raw(fetch_anon_fd()?) };
-    let ioctl = KasumiIoctlArg::new(request, arg);
-    match unsafe { ioctl::ioctl(fd, ioctl) } {
-        Ok(()) => {
-            crate::scoped_log!(
-                debug,
-                "kasumi:ioctl",
-                "complete: name={}, opcode=0x{:x}",
-                name,
-                request
-            );
-            Ok(())
-        }
-        Err(err) => {
-            let context = ioctl_error_context(name, request, err);
-            crate::scoped_log!(
-                error,
-                "kasumi:ioctl",
-                "failed: name={}, opcode=0x{:x}, errno={}",
-                name,
-                request,
-                err.raw_os_error()
-            );
-            Err(anyhow::Error::new(err).context(context))
-        }
-    }
+    ioctl_call(name, request, true, |fd| unsafe {
+        ioctl::ioctl(fd, KasumiIoctlArg::new(request, arg))
+    })
 }
 
 fn ioctl_with_bool(name: &str, request: KasumiIoctlRequest, value: bool) -> Result<()> {
     let mut raw: c_int = if value { 1 } else { 0 };
     ioctl_with_arg(name, request, &mut raw)
+}
+
+fn single_path_ioctl(name: &str, request: KasumiIoctlRequest, path: &Path) -> Result<()> {
+    let src = cstring_from_path(path)?;
+    let mut arg = KasumiSyscallArg::new(&src, None, 0);
+    ioctl_with_arg(name, request, &mut arg)
 }
 
 fn ensure_kernel_err(context: &str, kernel_err: c_int) -> Result<()> {
@@ -839,15 +750,11 @@ pub fn add_merge_rule(virtual_path: &Path, backing_path: &Path) -> Result<()> {
 }
 
 pub fn delete_rule(virtual_path: &Path) -> Result<()> {
-    let src = cstring_from_path(virtual_path)?;
-    let mut arg = KasumiSyscallArg::new(&src, None, 0);
-    ioctl_with_arg("delete_rule", KSM_IOC_DEL_RULE, &mut arg)
+    single_path_ioctl("delete_rule", KSM_IOC_DEL_RULE, virtual_path)
 }
 
 pub fn hide_path(virtual_path: &Path) -> Result<()> {
-    let src = cstring_from_path(virtual_path)?;
-    let mut arg = KasumiSyscallArg::new(&src, None, 0);
-    ioctl_with_arg("hide_path", KSM_IOC_HIDE_RULE, &mut arg)
+    single_path_ioctl("hide_path", KSM_IOC_HIDE_RULE, virtual_path)
 }
 
 fn helper_rule_dtype(path: &Path) -> Result<Option<c_int>> {
@@ -934,9 +841,7 @@ pub fn remove_rules_from_directory(target_base: &Path, module_dir: &Path) -> Res
 }
 
 pub fn set_mirror_path(path: &Path) -> Result<()> {
-    let src = cstring_from_path(path)?;
-    let mut arg = KasumiSyscallArg::new(&src, None, 0);
-    ioctl_with_arg("set_mirror_path", KSM_IOC_SET_MIRROR_PATH, &mut arg)
+    single_path_ioctl("set_mirror_path", KSM_IOC_SET_MIRROR_PATH, path)
 }
 
 pub fn set_debug(enable: bool) -> Result<()> {
@@ -1001,9 +906,7 @@ pub fn fix_mounts() -> Result<()> {
 }
 
 pub fn hide_overlay_xattrs(path: &Path) -> Result<()> {
-    let src = cstring_from_path(path)?;
-    let mut arg = KasumiSyscallArg::new(&src, None, 0);
-    ioctl_with_arg("hide_overlay_xattrs", KSM_IOC_HIDE_OVERLAY_XATTRS, &mut arg)
+    single_path_ioctl("hide_overlay_xattrs", KSM_IOC_HIDE_OVERLAY_XATTRS, path)
 }
 
 pub fn get_features() -> Result<c_int> {

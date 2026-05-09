@@ -31,6 +31,7 @@
     "@material/web": "^2.4.1",
     "kernelsu": "^3.0.2",
     "solid-js": "^1.9.12",
-    "vite-plugin-solid": "^2.11.12"
+    "vite-plugin-solid": "^2.11.12",
+    "zod": "^4.4.3"
   }
 }

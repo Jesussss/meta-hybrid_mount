@@ -26,9 +26,11 @@ use std::{ffi::CStr, ops::BitOr};
 use anyhow::{Context, Result, bail};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::mount::{
-    MountFlags, MountPropagationFlags, UnmountFlags, mount, mount_bind, mount_change, mount_move,
+    MountFlags, MountPropagationFlags, UnmountFlags, mount, mount_change, mount_move,
     mount_remount, unmount,
 };
+
+use self::utils::mount_bind;
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 #[derive(Clone, Copy)]
@@ -87,15 +89,6 @@ where
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn mount_bind<P, Q>(_source: P, _target: Q) -> Result<()>
-where
-    P: AsRef<Path>,
-    Q: AsRef<Path>,
-{
-    bail!("bind mount is only supported on linux/android")
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn mount_change<P>(_target: P, _flags: MountPropagationFlags) -> Result<()>
 where
     P: AsRef<Path>,
@@ -138,6 +131,18 @@ use crate::{
     },
     sys::fs::ensure_dir_exists,
 };
+
+fn try_remount_readonly(mount_target: &Path, log_path: &Path) {
+    if let Err(e) = mount_remount(mount_target, MountFlags::RDONLY | MountFlags::BIND, "") {
+        crate::scoped_log!(
+            warn,
+            "magic",
+            "remount readonly failed: path={}, error={:#?}",
+            log_path.display(),
+            e
+        );
+    }
+}
 
 #[derive(Debug)]
 pub struct MagicMountModuleFailure {
@@ -321,16 +326,7 @@ impl MagicMount {
             let _ = send_umountable(target);
         }
 
-        if let Err(e) = mount_remount(target, MountFlags::RDONLY | MountFlags::BIND, "") {
-            crate::scoped_log!(
-                warn,
-                "magic",
-                "remount readonly failed: path={}, error={:#?}",
-                target.display(),
-                e
-            );
-        }
-
+        try_remount_readonly(target, target);
         context.stats.record_file();
         Ok(())
     }
@@ -444,19 +440,7 @@ impl MagicMount {
                 self.path.display()
             );
 
-            if let Err(e) = mount_remount(
-                &self.work_dir_path,
-                MountFlags::RDONLY | MountFlags::BIND,
-                "",
-            ) {
-                crate::scoped_log!(
-                    warn,
-                    "magic",
-                    "remount readonly failed: path={}, error={:#?}",
-                    self.path.display(),
-                    e
-                );
-            }
+            try_remount_readonly(&self.work_dir_path, &self.path);
             mount_move(&self.work_dir_path, &self.path).with_context(|| {
                 format!(
                     "moving tmpfs {} -> {}",

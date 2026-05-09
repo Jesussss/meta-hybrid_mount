@@ -1,6 +1,11 @@
 import { APP_VERSION } from "../../constants_gen";
 import { AppError } from "./error";
 import { shellEscapeDoubleQuoted } from "./shell";
+import {
+  parseDaemonJson,
+  webuiSessionSchema,
+  type WebuiSession,
+} from "./validation";
 
 interface KsuExecResult {
   errno: number;
@@ -10,11 +15,6 @@ interface KsuExecResult {
 
 interface KsuModule {
   exec: (cmd: string, options?: unknown) => Promise<KsuExecResult>;
-}
-
-interface WebuiSession {
-  base_url: string;
-  token: string;
 }
 
 // Discriminated union matching Rust DaemonCommand #[serde(tag = "type", rename_all = "kebab-case")]
@@ -177,18 +177,14 @@ export async function ensureDaemonAwake(binaryPath: string): Promise<void> {
         DAEMON_WAKE_TIMEOUT_MS,
         "hybrid-mount daemon wake timed out",
       );
-      const payload = parseDaemonJsonOutput(raw);
-      if (
-        !payload ||
-        typeof payload !== "object" ||
-        typeof (payload as WebuiSession).base_url !== "string" ||
-        typeof (payload as WebuiSession).token !== "string"
-      ) {
+      const rawPayload = parseDaemonJson(raw);
+      const parsed = webuiSessionSchema.safeParse(rawPayload);
+      if (!parsed.success) {
         throw new AppError(
           "hybrid-mount daemon returned invalid WebUI session",
         );
       }
-      webuiSession = payload as WebuiSession;
+      webuiSession = parsed.data;
       startSse();
     })().catch((error) => {
       daemonReady = null;
@@ -199,37 +195,16 @@ export async function ensureDaemonAwake(binaryPath: string): Promise<void> {
   return daemonReady;
 }
 
-function getStructuredError(payload: unknown): string | null {
-  if (!payload || typeof payload !== "object") return null;
-
-  const record = payload as Record<string, unknown>;
-  if (record.type === "error" && typeof record.error === "string") {
-    return record.error;
-  }
-  if (record.ok === false && typeof record.error === "string") {
-    return record.error;
-  }
-  return null;
-}
-
 export function parseDaemonJsonOutput(raw: string): unknown {
-  let payload: unknown;
   try {
-    payload = JSON.parse(raw) as unknown;
-  } catch (error) {
+    return parseDaemonJson(raw);
+  } catch (cause) {
     throw new AppError(
-      error instanceof Error
-        ? `Failed to parse hybrid-mount JSON output: ${error.message}`
-        : "Failed to parse hybrid-mount JSON output",
+      cause instanceof Error
+        ? cause.message
+        : "Failed to parse daemon JSON output",
     );
   }
-
-  const structuredError = getStructuredError(payload);
-  if (structuredError) {
-    throw new AppError(structuredError);
-  }
-
-  return payload;
 }
 
 async function runDaemonHttp(
@@ -265,21 +240,19 @@ async function runDaemonHttp(
     window.clearTimeout(timer);
   }
 
-  const payload = parseDaemonJsonOutput(text);
-  if (!response.ok) {
-    throw new AppError(
-      payload && typeof payload === "object" && "error" in payload
-        ? String((payload as { error?: unknown }).error)
-        : `daemon HTTP request failed: ${response.status}`,
-    );
+  let payload: unknown;
+  try {
+    payload = parseDaemonJsonOutput(text);
+  } catch (e) {
+    if (!response.ok) {
+      throw e instanceof AppError
+        ? e
+        : new AppError(`daemon HTTP request failed: ${response.status}`);
+    }
+    throw e;
   }
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "ok" in payload &&
-    (payload as { ok?: unknown }).ok === true
-  ) {
-    return (payload as { data?: unknown }).data;
+  if (!response.ok) {
+    throw new AppError(`daemon HTTP request failed: ${response.status}`);
   }
   return payload;
 }

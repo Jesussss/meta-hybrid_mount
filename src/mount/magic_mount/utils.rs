@@ -34,7 +34,7 @@ use crate::{
 };
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn mount_bind<P, Q>(_from: P, _to: Q) -> Result<()>
+pub(super) fn mount_bind<P, Q>(_from: P, _to: Q) -> Result<()>
 where
     P: AsRef<Path>,
     Q: AsRef<Path>,
@@ -56,6 +56,16 @@ where
     }
 }
 
+fn copy_metadata(src: &Path, dst: &Path, metadata: &Metadata) -> Result<()> {
+    chmod(dst, Mode::from_raw_mode(metadata.mode() as _))?;
+    chown(
+        dst,
+        Some(Uid::from_raw(metadata.uid())),
+        Some(Gid::from_raw(metadata.gid())),
+    )?;
+    lsetfilecon(dst, lgetfilecon(src)?.as_str())
+}
+
 pub fn tmpfs_skeleton<P>(path: P, work_dir_path: P, node: &Node) -> Result<()>
 where
     P: AsRef<Path>,
@@ -72,15 +82,7 @@ where
     create_dir_all(work_dir_path)?;
 
     let (metadata, path) = metadata_path(path, node)?;
-
-    chmod(work_dir_path, Mode::from_raw_mode(metadata.mode() as _))?;
-    chown(
-        work_dir_path,
-        Some(Uid::from_raw(metadata.uid())),
-        Some(Gid::from_raw(metadata.gid())),
-    )?;
-    lsetfilecon(work_dir_path, lgetfilecon(path)?.as_str())?;
-
+    copy_metadata(&path, work_dir_path, &metadata)?;
     Ok(())
 }
 
@@ -111,14 +113,7 @@ where
             work_dir_path.display()
         );
         create_dir(&work_dir_path)?;
-        let metadata = entry.metadata()?;
-        chmod(&work_dir_path, Mode::from_raw_mode(metadata.mode() as _))?;
-        chown(
-            &work_dir_path,
-            Some(Uid::from_raw(metadata.uid())),
-            Some(Gid::from_raw(metadata.gid())),
-        )?;
-        lsetfilecon(&work_dir_path, lgetfilecon(&path)?.as_str())?;
+        copy_metadata(&path, &work_dir_path, &entry.metadata()?)?;
         for entry_result in path.read_dir()? {
             let entry = match entry_result {
                 Ok(entry) => entry,
