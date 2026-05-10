@@ -187,17 +187,12 @@ impl Default for KasumiConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum DaemonStartupMode {
+    #[default]
     OnDemand,
     Persistent,
-}
-
-impl Default for DaemonStartupMode {
-    fn default() -> Self {
-        Self::OnDemand
-    }
 }
 
 impl std::fmt::Display for DaemonStartupMode {
