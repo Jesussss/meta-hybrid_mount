@@ -125,7 +125,7 @@ fn build_scanned_modules_payload(
         let runtime_mode = enabled.then(|| runtime_index.mode(&id)).flatten();
         let mode = runtime_mode.unwrap_or(rules.default_mode);
 
-        let mount_error = runtime_index.mount_error_reason(&id);
+        let mount_error = mount_error_reason(&runtime_index, &id, &module_path);
 
         modules.push(ModuleListEntry {
             id,
@@ -150,6 +150,7 @@ fn build_runtime_modules_payload(config: &Config, state: &RuntimeState) -> Vec<M
     ids.extend(state.kasumi_modules.iter().cloned());
     ids.extend(state.skip_mount_modules.iter().cloned());
     ids.extend(state.mount_error_modules.iter().cloned());
+    ids.extend(collect_mount_error_marker_modules(&config.moduledir));
     ids.extend(config.rules.keys().cloned());
 
     ids.into_iter()
@@ -159,8 +160,9 @@ fn build_runtime_modules_payload(config: &Config, state: &RuntimeState) -> Vec<M
             let rules = inventory::load_module_rules(config, &id);
             let runtime_mode = runtime_index.mode(&id);
             let mode = runtime_mode.unwrap_or(rules.default_mode);
-            let enabled = runtime_index.enabled(&id);
-            let mount_error = runtime_index.mount_error_reason(&id);
+            let enabled =
+                runtime_index.enabled(&id) && !inventory::has_mount_block_marker(&source_path);
+            let mount_error = mount_error_reason(&runtime_index, &id, &source_path);
 
             ModuleListEntry {
                 id,
@@ -173,6 +175,38 @@ fn build_runtime_modules_payload(config: &Config, state: &RuntimeState) -> Vec<M
             }
         })
         .collect()
+}
+
+fn collect_mount_error_marker_modules(moduledir: &Path) -> Vec<String> {
+    let Ok(entries) = fs::read_dir(moduledir) else {
+        return Vec::new();
+    };
+
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            if !path.is_dir() || !path.join(defs::MOUNT_ERROR_FILE_NAME).exists() {
+                return None;
+            }
+
+            let id = entry.file_name().to_string_lossy().into_owned();
+            (!inventory::is_reserved_module_dir(&id)).then_some(id)
+        })
+        .collect()
+}
+
+fn mount_error_reason(
+    runtime_index: &RuntimeModuleIndex<'_>,
+    module_id: &str,
+    module_path: &Path,
+) -> Option<String> {
+    runtime_index.mount_error_reason(module_id).or_else(|| {
+        module_path
+            .join(defs::MOUNT_ERROR_FILE_NAME)
+            .exists()
+            .then(|| "mount_error marker present".to_string())
+    })
 }
 
 pub fn apply_modules_payload(
@@ -274,7 +308,12 @@ impl<'a> RuntimeModuleIndex<'a> {
         if !self.mount_errors.contains(module_id) {
             return None;
         }
-        self.mount_error_reasons.get(module_id).cloned()
+        Some(
+            self.mount_error_reasons
+                .get(module_id)
+                .cloned()
+                .unwrap_or_else(|| "mount error recorded".to_string()),
+        )
     }
 }
 
@@ -361,12 +400,13 @@ fn default_module_metadata(module_id: &str) -> ModuleMetadata {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::{fs, path::PathBuf};
 
     use super::*;
     use crate::{
         conf::schema::Config,
         core::runtime_state::RuntimeState,
+        defs,
         domain::{DefaultMode, MountMode},
     };
 
@@ -398,5 +438,32 @@ mod tests {
         assert!(module.enabled);
         assert_eq!(module.source_path, PathBuf::from("/modules/alpha"));
         assert_eq!(module.rules.default_mode, MountMode::Overlay);
+    }
+
+    #[test]
+    fn runtime_modules_payload_includes_mount_error_marker_modules() {
+        let temp = tempfile::tempdir().unwrap();
+        let module_dir = temp.path().join("broken");
+        fs::create_dir_all(&module_dir).unwrap();
+        fs::write(module_dir.join(defs::MOUNT_ERROR_FILE_NAME), b"").unwrap();
+
+        let config = Config {
+            moduledir: temp.path().to_path_buf(),
+            default_mode: DefaultMode::Overlay,
+            ..Default::default()
+        };
+        let state = RuntimeState::default();
+
+        let modules = build_runtime_modules_payload(&config, &state);
+        assert_eq!(modules.len(), 1);
+
+        let module = &modules[0];
+        assert_eq!(module.id, "broken");
+        assert!(!module.is_mounted);
+        assert!(!module.enabled);
+        assert_eq!(
+            module.mount_error.as_deref(),
+            Some("mount_error marker present")
+        );
     }
 }

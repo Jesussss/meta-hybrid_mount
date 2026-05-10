@@ -22,6 +22,7 @@ const KASUMI_LKM_FILE =
 
 function createMockState() {
   return {
+    mountErrorsCleared: false,
     kasumi: {
       enabled: true,
       lkmLoaded: true,
@@ -280,6 +281,9 @@ export const MockAPI: AppAPI = {
         description: "This module is not mounted.",
         mode: "ignore",
         is_mounted: false,
+        mount_error: mockState.mountErrorsCleared
+          ? undefined
+          : "stage=execute; error=mock mount failure",
         rules: {
           default_mode: "ignore",
           paths: {},
@@ -417,6 +421,7 @@ export const MockAPI: AppAPI = {
   },
   async clearMountErrors(): Promise<void> {
     await delay(180);
+    mockState.mountErrorsCleared = true;
   },
   async clearKasumiMapsRules(): Promise<void> {
     await delay(180);

@@ -12,6 +12,7 @@ interface ModuleRuntimeEntry {
   enabled: boolean;
   source_path?: string;
   rules: ModuleRules;
+  mount_error?: string;
 }
 
 interface ModuleMetadata {
@@ -45,6 +46,10 @@ function normalizeModuleRuntimeEntry(value: unknown): ModuleRuntimeEntry {
       default_mode: normalizeMountMode(rulesPayload.default_mode),
       paths: normalizeStringMap(rulesPayload.paths),
     },
+    mount_error:
+      isString(payload.mount_error) && payload.mount_error.trim()
+        ? payload.mount_error
+        : undefined,
   };
 }
 
@@ -99,6 +104,7 @@ function toModule(entry: ModuleRuntimeEntry, metadata: ModuleMetadata): Module {
     enabled: entry.enabled,
     source_path: entry.source_path,
     rules: entry.rules,
+    mount_error: entry.mount_error,
   };
 }
 

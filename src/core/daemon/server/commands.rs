@@ -34,7 +34,7 @@ use super::{
 };
 use crate::{
     conf::{config::Config, schema},
-    core::{api, runtime_state::RuntimeState, user_hide_rules},
+    core::{api, inventory, runtime_state::RuntimeState, user_hide_rules},
     defs,
     mount::kasumi as kasumi_mount,
     sys::{kasumi, lkm},
@@ -453,6 +453,7 @@ pub(super) fn dispatch_command(
             )
         }
         DaemonCommand::ClearMountErrors => {
+            let removed_markers = clear_mount_error_markers(config)?;
             let mut guard = state.lock().expect("daemon state poisoned");
             let cleared = guard.mount_error_modules.len();
             guard.mount_error_modules.clear();
@@ -460,7 +461,7 @@ pub(super) fn dispatch_command(
             guard.save()?;
             drop(guard);
             http::broadcast_sse_event(state, sse_clients, "state_update");
-            to_value(&json!({ "cleared": cleared }))
+            to_value(&json!({ "cleared": cleared, "removed_markers": removed_markers }))
         }
         DaemonCommand::Batch { commands } => {
             let noop_clients = Arc::new(Mutex::new(Vec::new()));
@@ -555,6 +556,50 @@ fn validate_url(url: &str) -> Result<()> {
         bail!("URL contains suspicious argument-like patterns");
     }
     Ok(())
+}
+
+fn clear_mount_error_markers(config: &Config) -> Result<usize> {
+    let entries = match fs::read_dir(&config.moduledir) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(err) => {
+            return Err(err)
+                .with_context(|| format!("failed to read {}", config.moduledir.display()));
+        }
+    };
+
+    let mut removed = 0usize;
+    for entry in entries {
+        let entry = entry.with_context(|| {
+            format!(
+                "failed to enumerate module directory {}",
+                config.moduledir.display()
+            )
+        })?;
+        if !entry
+            .file_type()
+            .with_context(|| format!("failed to inspect {}", entry.path().display()))?
+            .is_dir()
+        {
+            continue;
+        }
+
+        let id = entry.file_name().to_string_lossy().into_owned();
+        if inventory::is_reserved_module_dir(&id) {
+            continue;
+        }
+
+        let marker = entry.path().join(defs::MOUNT_ERROR_FILE_NAME);
+        match fs::remove_file(&marker) {
+            Ok(()) => removed += 1,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => {
+                return Err(err).with_context(|| format!("failed to remove {}", marker.display()));
+            }
+        }
+    }
+
+    Ok(removed)
 }
 
 fn reboot_device() -> Result<()> {
@@ -714,5 +759,23 @@ mod tests {
         assert!(validate_url("https://example.com\n").is_err());
         assert!(validate_url("https://example.com\r\n").is_err());
         assert!(validate_url("https://ex\0ample.com").is_err());
+    }
+
+    #[test]
+    fn clear_mount_error_markers_removes_marker_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let module_dir = temp.path().join("broken");
+        fs::create_dir_all(&module_dir).unwrap();
+        let marker = module_dir.join(defs::MOUNT_ERROR_FILE_NAME);
+        fs::write(&marker, b"").unwrap();
+
+        let config = Config {
+            moduledir: temp.path().to_path_buf(),
+            ..Default::default()
+        };
+
+        assert_eq!(clear_mount_error_markers(&config).unwrap(), 1);
+        assert!(!marker.exists());
+        assert_eq!(clear_mount_error_markers(&config).unwrap(), 0);
     }
 }

@@ -91,7 +91,8 @@ export default function ModulesTab() {
   const filteredModules = createMemo(() =>
     moduleStore.modules.filter((module) => {
       const q = deferredSearchQuery().toLowerCase();
-      if (!module.is_mounted && !showUmount()) {
+      const hasMountError = Boolean(module.mount_error);
+      if (!module.is_mounted && !showUmount() && !hasMountError) {
         return false;
       }
       const matchSearch =
@@ -110,7 +111,7 @@ export default function ModulesTab() {
   );
   const [clearingErrors, setClearingErrors] = createSignal(false);
   const hasMountErrors = createMemo(() =>
-    filteredModules().some((m) => !!m.mount_error),
+    moduleStore.modules.some((m) => !!m.mount_error),
   );
 
   async function clearMountErrors() {

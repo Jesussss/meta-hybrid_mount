@@ -143,4 +143,30 @@ author = Alice
       description: "No description",
     });
   });
+
+  it("keeps mount error details from the runtime payload", async () => {
+    mockRunHybridMountJson.mockResolvedValue([
+      {
+        id: "broken_mod",
+        mode: "overlay",
+        is_mounted: false,
+        enabled: false,
+        source_path: "/modules/broken_mod",
+        mount_error: "stage=execute; error=overlay failed",
+        rules: {
+          default_mode: "overlay",
+          paths: {},
+        },
+      },
+    ]);
+    mockReadModuleProp.mockRejectedValue(new Error("ENOENT"));
+
+    const modules = await scanModules();
+    expect(modules[0]).toMatchObject({
+      id: "broken_mod",
+      is_mounted: false,
+      enabled: false,
+      mount_error: "stage=execute; error=overlay failed",
+    });
+  });
 });
