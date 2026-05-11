@@ -67,6 +67,7 @@ pub fn serve(_config: crate::conf::config::Config) -> Result<()> {
     }
     let _guard = DaemonRuntimeGuard::new(state.clone());
     let shutdown = install_shutdown_flag()?;
+    let config_cache = Arc::new(commands::RuntimeConfigCache::new());
 
     let active_webui_connections = Arc::new(AtomicUsize::new(0));
     let sse_clients: Arc<Mutex<Vec<std::net::TcpStream>>> = Arc::new(Mutex::new(Vec::new()));
@@ -112,9 +113,14 @@ pub fn serve(_config: crate::conf::config::Config) -> Result<()> {
         if fds[0].revents & libc::POLLIN != 0 {
             match listener.accept() {
                 Ok((mut stream, _addr)) => {
-                    if let Err(err) =
-                        handle_stream(&state, &shutdown, &webui_session, &sse_clients, &mut stream)
-                    {
+                    if let Err(err) = handle_stream(
+                        &config_cache,
+                        &state,
+                        &shutdown,
+                        &webui_session,
+                        &sse_clients,
+                        &mut stream,
+                    ) {
                         crate::scoped_log!(warn, "daemon", "request failed: error={:#}", err);
                         let payload = DaemonResponse::error(format!("{err:#}"));
                         let _ = write_response(&mut stream, &payload);
@@ -146,12 +152,18 @@ pub fn serve(_config: crate::conf::config::Config) -> Result<()> {
                     let shutdown = shutdown.clone();
                     let session = webui_session.clone();
                     let thread_sse = sse_clients.clone();
+                    let thread_config_cache = config_cache.clone();
                     let _ = std::thread::Builder::new()
                         .name("hybrid-mount-webui-rpc".to_string())
                         .spawn(move || {
                             let _connection_guard = connection_guard;
                             if let Err(err) = http::handle_http_connection(
-                                &state, &shutdown, &session, thread_sse, stream,
+                                &thread_config_cache,
+                                &state,
+                                &shutdown,
+                                &session,
+                                thread_sse,
+                                stream,
                             ) {
                                 crate::scoped_log!(
                                     warn,
@@ -180,6 +192,7 @@ pub fn serve(_config: crate::conf::config::Config) -> Result<()> {
 }
 
 fn handle_stream(
+    config_cache: &commands::RuntimeConfigCache,
     state: &Arc<Mutex<RuntimeState>>,
     shutdown: &Arc<AtomicBool>,
     webui: &http::WebuiHttpSession,
@@ -204,10 +217,11 @@ fn handle_stream(
     let config_path = request
         .config_path
         .unwrap_or_else(|| PathBuf::from(defs::CONFIG_FILE));
-    let effective_config = commands::load_runtime_config(&config_path)?;
+    let effective_config = commands::load_runtime_config(config_cache, &config_path)?;
     let ctx = commands::CommandContext::new(
         &effective_config,
         &config_path,
+        config_cache,
         state,
         shutdown,
         webui,

@@ -39,6 +39,7 @@ pub(super) struct WebuiHttpState {
 pub(super) struct WebuiHttpSession {
     addr: SocketAddr,
     token: String,
+    bearer_token: String,
 }
 
 fn random_u64_hex() -> Result<String> {
@@ -65,9 +66,14 @@ impl WebuiHttpState {
             random_u64_hex().context("Failed to generate daemon token")?,
             random_u64_hex().context("Failed to generate daemon token")?
         );
+        let bearer_token = format!("Bearer {token}");
         Ok(Self {
             listener,
-            session: WebuiHttpSession { addr, token },
+            session: WebuiHttpSession {
+                addr,
+                token,
+                bearer_token,
+            },
         })
     }
 
@@ -163,6 +169,7 @@ pub(super) enum ConnectionAction {
 }
 
 pub(super) fn handle_http_connection(
+    config_cache: &super::commands::RuntimeConfigCache,
     state: &Arc<Mutex<RuntimeState>>,
     shutdown: &Arc<AtomicBool>,
     webui: &WebuiHttpSession,
@@ -200,8 +207,15 @@ pub(super) fn handle_http_connection(
                 return Err(err);
             }
         };
-        if handle_http_request(state, shutdown, webui, &sse_clients, &mut stream, request)?
-            == ConnectionAction::Close
+        if handle_http_request(
+            config_cache,
+            state,
+            shutdown,
+            webui,
+            &sse_clients,
+            &mut stream,
+            request,
+        )? == ConnectionAction::Close
         {
             break;
         }
@@ -239,20 +253,17 @@ fn read_http_request(
             break;
         }
         if let Some((name, value)) = trimmed.split_once(':') {
-            let name = name.trim().to_ascii_lowercase();
+            let name = name.trim();
             let value = value.trim();
-            if name == "content-length" {
+            if name.eq_ignore_ascii_case("content-length") {
                 content_length = parse_content_length(value)?;
-            } else if name == "authorization" {
-                authorized = value == format!("Bearer {}", webui.token);
-            } else if name == "connection" {
-                for directive in value
-                    .split(',')
-                    .map(|item| item.trim().to_ascii_lowercase())
-                {
-                    if directive == "close" {
+            } else if name.eq_ignore_ascii_case("authorization") {
+                authorized = value == webui.bearer_token.as_str();
+            } else if name.eq_ignore_ascii_case("connection") {
+                for directive in value.split(',').map(str::trim) {
+                    if directive.eq_ignore_ascii_case("close") {
                         close_after_response = true;
-                    } else if directive == "keep-alive" {
+                    } else if directive.eq_ignore_ascii_case("keep-alive") {
                         close_after_response = false;
                     }
                 }
@@ -289,6 +300,7 @@ fn allocate_request_body(content_length: usize) -> Result<Vec<u8>> {
 }
 
 fn handle_http_request(
+    config_cache: &super::commands::RuntimeConfigCache,
     state: &Arc<Mutex<RuntimeState>>,
     shutdown: &Arc<AtomicBool>,
     webui: &WebuiHttpSession,
@@ -344,10 +356,11 @@ fn handle_http_request(
     let config_path = request
         .config_path
         .unwrap_or_else(|| PathBuf::from(defs::CONFIG_FILE));
-    let effective_config = super::commands::load_runtime_config(&config_path)?;
+    let effective_config = super::commands::load_runtime_config(config_cache, &config_path)?;
     let ctx = super::commands::CommandContext::new(
         &effective_config,
         &config_path,
+        config_cache,
         state,
         shutdown,
         webui,

@@ -13,10 +13,11 @@
 // limitations under the License.
 
 use std::{
+    collections::HashMap,
     fs,
     net::TcpStream,
     os::unix::fs::{FileTypeExt, MetadataExt},
-    path::Path,
+    path::{Path, PathBuf},
     process::Command,
     sync::{
         Arc, Mutex,
@@ -40,7 +41,100 @@ use crate::{
     sys::{kasumi, lkm},
 };
 
-pub(super) fn load_runtime_config(config_path: &Path) -> Result<Config> {
+#[derive(Clone, PartialEq, Eq)]
+enum ConfigFileStamp {
+    Missing,
+    Present {
+        dev: u64,
+        ino: u64,
+        len: u64,
+        mtime_sec: i64,
+        mtime_nsec: i64,
+        ctime_sec: i64,
+        ctime_nsec: i64,
+    },
+}
+
+struct CachedRuntimeConfig {
+    stamp: ConfigFileStamp,
+    config: Arc<Config>,
+}
+
+pub(super) struct RuntimeConfigCache {
+    entries: Mutex<HashMap<PathBuf, CachedRuntimeConfig>>,
+}
+
+impl RuntimeConfigCache {
+    pub(super) fn new() -> Self {
+        Self {
+            entries: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub(super) fn load(&self, config_path: &Path) -> Result<Arc<Config>> {
+        let stamp = config_file_stamp(config_path)?;
+        let key = config_path.to_path_buf();
+        let mut entries = self.entries.lock().expect("runtime config cache poisoned");
+
+        if let Some(entry) = entries.get(&key)
+            && entry.stamp == stamp
+        {
+            return Ok(entry.config.clone());
+        }
+
+        let config = Arc::new(load_runtime_config_uncached(config_path)?);
+        entries.insert(
+            key,
+            CachedRuntimeConfig {
+                stamp,
+                config: config.clone(),
+            },
+        );
+        Ok(config)
+    }
+
+    pub(super) fn store(&self, config_path: &Path, config: Config) -> Result<Arc<Config>> {
+        let stamp = config_file_stamp(config_path)?;
+        let config = Arc::new(config);
+        self.entries
+            .lock()
+            .expect("runtime config cache poisoned")
+            .insert(
+                config_path.to_path_buf(),
+                CachedRuntimeConfig {
+                    stamp,
+                    config: config.clone(),
+                },
+            );
+        Ok(config)
+    }
+}
+
+fn config_file_stamp(config_path: &Path) -> Result<ConfigFileStamp> {
+    match fs::metadata(config_path) {
+        Ok(metadata) => Ok(ConfigFileStamp::Present {
+            dev: metadata.dev(),
+            ino: metadata.ino(),
+            len: metadata.len(),
+            mtime_sec: metadata.mtime(),
+            mtime_nsec: metadata.mtime_nsec(),
+            ctime_sec: metadata.ctime(),
+            ctime_nsec: metadata.ctime_nsec(),
+        }),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(ConfigFileStamp::Missing),
+        Err(err) => Err(err)
+            .with_context(|| format!("Failed to inspect config file {}", config_path.display())),
+    }
+}
+
+pub(super) fn load_runtime_config(
+    config_cache: &RuntimeConfigCache,
+    config_path: &Path,
+) -> Result<Arc<Config>> {
+    config_cache.load(config_path)
+}
+
+fn load_runtime_config_uncached(config_path: &Path) -> Result<Config> {
     Config::load_optional_from_file(config_path)
         .with_context(|| format!("Failed to load config from path: {}", config_path.display()))
 }
@@ -48,6 +142,7 @@ pub(super) fn load_runtime_config(config_path: &Path) -> Result<Config> {
 pub(super) struct CommandContext<'a> {
     config: &'a Config,
     config_path: &'a Path,
+    config_cache: &'a RuntimeConfigCache,
     state: &'a Arc<Mutex<RuntimeState>>,
     shutdown: &'a Arc<AtomicBool>,
     webui: &'a WebuiHttpSession,
@@ -58,6 +153,7 @@ impl<'a> CommandContext<'a> {
     pub(super) fn new(
         config: &'a Config,
         config_path: &'a Path,
+        config_cache: &'a RuntimeConfigCache,
         state: &'a Arc<Mutex<RuntimeState>>,
         shutdown: &'a Arc<AtomicBool>,
         webui: &'a WebuiHttpSession,
@@ -66,6 +162,7 @@ impl<'a> CommandContext<'a> {
         Self {
             config,
             config_path,
+            config_cache,
             state,
             shutdown,
             webui,
@@ -94,11 +191,31 @@ impl<'a> CommandContext<'a> {
     fn refresh_runtime_snapshot(&self, config: &Config) -> Result<()> {
         refresh_runtime_snapshot(config, self.state, self.sse_clients)
     }
+
+    fn cache_config(&self, config: Config) -> Result<Arc<Config>> {
+        self.config_cache.store(self.config_path, config)
+    }
+}
+
+fn runtime_snapshot(state: &Arc<Mutex<RuntimeState>>) -> RuntimeState {
+    state.lock().expect("daemon state poisoned").clone()
+}
+
+fn cached_status_value(state: &Arc<Mutex<RuntimeState>>) -> Result<Value> {
+    let mut guard = state.lock().expect("daemon state poisoned");
+    Ok(guard.status_value()?.clone())
+}
+
+fn cached_status_and_snapshot(state: &Arc<Mutex<RuntimeState>>) -> Result<(Value, RuntimeState)> {
+    let mut guard = state.lock().expect("daemon state poisoned");
+    let status_value = guard.status_value()?.clone();
+    Ok((status_value, guard.clone()))
 }
 
 pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand) -> Result<Value> {
     let config = ctx.config;
     let config_path = ctx.config_path;
+    let config_cache = ctx.config_cache;
     let state = ctx.state;
     let shutdown = ctx.shutdown;
     let webui = ctx.webui;
@@ -108,12 +225,11 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
         DaemonCommand::Ping => to_value(&json!({ "status": "ok" })),
         DaemonCommand::WebuiStart => Ok(webui.session_payload()),
         DaemonCommand::Init => {
-            let mut guard = state.lock().expect("daemon state poisoned");
-            let status_value = guard.status_value()?.clone();
+            let (status_value, snapshot) = cached_status_and_snapshot(state)?;
             let config_value = to_value(config)?;
             let version_value = to_value(&api::build_version_payload())?;
-            let kasumi_status_value = build_kasumi_runtime_json(config, &guard)?;
-            let system_info_value = to_value(&api::build_system_info_payload(&guard))?;
+            let kasumi_status_value = build_kasumi_runtime_json(config, &snapshot)?;
+            let system_info_value = to_value(&api::build_system_info_payload(&snapshot))?;
             to_value(&json!({
                 "status": status_value,
                 "config": config_value,
@@ -126,26 +242,23 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
             shutdown.store(true, Ordering::Relaxed);
             to_value(&json!({ "shutdown": true }))
         }
-        DaemonCommand::Status => {
-            let mut guard = state.lock().expect("daemon state poisoned");
-            Ok(guard.status_value()?.clone())
-        }
+        DaemonCommand::Status => cached_status_value(state),
         DaemonCommand::ApiStorage => {
-            let guard = state.lock().expect("daemon state poisoned");
-            to_value(&api::build_storage_payload(&guard))
+            let snapshot = runtime_snapshot(state);
+            to_value(&api::build_storage_payload(&snapshot))
         }
         DaemonCommand::ApiMountStats => {
-            let guard = state.lock().expect("daemon state poisoned");
-            to_value(&api::build_mount_stats_payload(&guard))
+            let snapshot = runtime_snapshot(state);
+            to_value(&api::build_mount_stats_payload(&snapshot))
         }
         DaemonCommand::ApiMountTopology => {
-            let guard = state.lock().expect("daemon state poisoned");
-            to_value(&api::build_mount_topology_payload(config, &guard))
+            let snapshot = runtime_snapshot(state);
+            to_value(&api::build_mount_topology_payload(config, &snapshot))
         }
         DaemonCommand::ApiPartitions => to_value(&api::build_partitions_payload(config)),
         DaemonCommand::ApiSystemInfo => {
-            let guard = state.lock().expect("daemon state poisoned");
-            to_value(&api::build_system_info_payload(&guard))
+            let snapshot = runtime_snapshot(state);
+            to_value(&api::build_system_info_payload(&snapshot))
         }
         DaemonCommand::ApiVersion => to_value(&api::build_version_payload()),
         DaemonCommand::ApiConfigGet => to_value(config),
@@ -153,6 +266,7 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
             let config: Config =
                 serde_json::from_value(payload).context("Failed to decode config payload")?;
             config.save_to_file(config_path)?;
+            ctx.cache_config(config.clone())?;
             ctx.refresh(&config, json!({ "saved": true, "config": &config }))
         }
         DaemonCommand::ApiConfigPatch {
@@ -160,6 +274,7 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
             apply_runtime,
         } => {
             let config = patch_config_file(config_path, patch)?;
+            ctx.cache_config(config.clone())?;
             let applied = apply_runtime
                 .then(|| apply_runtime_config(&config))
                 .transpose()?
@@ -176,10 +291,11 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
         DaemonCommand::ApiConfigReset => {
             let config = Config::default();
             save_and_apply_runtime_config(&config, config_path)?;
+            ctx.cache_config(config.clone())?;
             ctx.refresh(&config, json!({ "saved": true, "config": &config }))
         }
         DaemonCommand::ApiModulesList { path } => {
-            let snapshot = state.lock().expect("daemon state poisoned").clone();
+            let snapshot = runtime_snapshot(state);
             to_value(&api::build_modules_payload(
                 config,
                 &snapshot,
@@ -188,7 +304,8 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
         }
         DaemonCommand::ApiModulesApply { modules } => {
             let payload = api::apply_modules_payload(config_path, &modules)?;
-            let config = load_runtime_config(config_path)?;
+            let config = load_runtime_config_uncached(config_path)?;
+            ctx.cache_config(config.clone())?;
             ctx.refresh(&config, payload)
         }
         DaemonCommand::ApiLkm => to_value(&api::build_lkm_payload(config)),
@@ -207,6 +324,7 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
         }
         DaemonCommand::ApiKasumiMapsAdd { rule } => {
             let updated = add_kasumi_maps_config_rule(config_path, rule)?;
+            ctx.cache_config(updated.clone())?;
             apply_runtime_config(&updated)?;
             let count = updated.kasumi.maps_rules.len();
             ctx.refresh(
@@ -219,9 +337,12 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
             )
         }
         DaemonCommand::ApiKasumiMapsClear => {
-            let mut updated = load_runtime_config(config_path)?;
+            let mut updated = load_runtime_config(config_cache, config_path)?
+                .as_ref()
+                .clone();
             updated.kasumi.maps_rules.clear();
             updated.save_to_file(config_path)?;
+            ctx.cache_config(updated.clone())?;
             apply_runtime_config(&updated)?;
             ctx.refresh(
                 &updated,
@@ -233,8 +354,8 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
             )
         }
         DaemonCommand::KasumiStatus => {
-            let guard = state.lock().expect("daemon state poisoned");
-            build_kasumi_runtime_json(config, &guard)
+            let snapshot = runtime_snapshot(state);
+            build_kasumi_runtime_json(config, &snapshot)
         }
         DaemonCommand::KasumiList => {
             let payload = if kasumi_mount::can_operate(config) {
@@ -245,8 +366,8 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
             to_value(&payload)
         }
         DaemonCommand::KasumiVersion => {
-            let guard = state.lock().expect("daemon state poisoned");
-            to_value(&api::build_kasumi_version_payload(config, &guard))
+            let snapshot = runtime_snapshot(state);
+            to_value(&api::build_kasumi_version_payload(config, &snapshot))
         }
         DaemonCommand::KasumiFeatures => to_value(&api::build_features_payload()),
         DaemonCommand::KasumiHooks => to_value(&kasumi_mount::hook_lines()?),
@@ -398,8 +519,15 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
         }
         DaemonCommand::Batch { commands } => {
             let noop_clients = Arc::new(Mutex::new(Vec::new()));
-            let batch_ctx =
-                CommandContext::new(config, config_path, state, shutdown, webui, &noop_clients);
+            let batch_ctx = CommandContext::new(
+                config,
+                config_path,
+                config_cache,
+                state,
+                shutdown,
+                webui,
+                &noop_clients,
+            );
             let mut results: Vec<Value> = Vec::with_capacity(commands.len());
             for cmd in commands {
                 let result = match dispatch_command(&batch_ctx, cmd) {
@@ -415,7 +543,7 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
 }
 
 fn patch_config_file(config_path: &Path, patch: Value) -> Result<Config> {
-    let config = load_runtime_config(config_path)?;
+    let config = load_runtime_config_uncached(config_path)?;
     let mut payload = serde_json::to_value(config).context("Failed to encode current config")?;
     merge_json(&mut payload, patch);
 
@@ -540,7 +668,7 @@ fn reboot_device() -> Result<()> {
 }
 
 fn add_kasumi_maps_config_rule(config_path: &Path, rule: Value) -> Result<Config> {
-    let mut config = load_runtime_config(config_path)?;
+    let mut config = load_runtime_config_uncached(config_path)?;
     let rule: crate::conf::schema::KasumiMapsRuleConfig =
         serde_json::from_value(rule).context("Failed to decode Kasumi maps rule")?;
     config

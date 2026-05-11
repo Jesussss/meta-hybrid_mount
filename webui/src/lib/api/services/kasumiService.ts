@@ -25,7 +25,10 @@ async function updateKasumiConfig(
 }
 
 export async function getKasumiStatus(): Promise<KasumiStatus> {
-  const payload = await runDaemonCommand({ type: "kasumi-status" }, PATHS.BINARY);
+  const payload = await runDaemonCommand(
+    { type: "kasumi-status" },
+    PATHS.BINARY,
+  );
   const status = buildKasumiStatusFromPayload(
     payload,
     DEFAULT_CONFIG.kasumi,
@@ -129,10 +132,7 @@ export async function clearKasumiUname(
 }
 
 export async function restoreKasumiUnameGlobal(): Promise<void> {
-  await runDaemonCommand(
-    { type: "kasumi-restore-uname-global" },
-    PATHS.BINARY,
-  );
+  await runDaemonCommand({ type: "kasumi-restore-uname-global" }, PATHS.BINARY);
 }
 
 export async function setKasumiCmdline(value: string): Promise<void> {
