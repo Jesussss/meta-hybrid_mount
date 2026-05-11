@@ -21,19 +21,12 @@ use crate::{
     core::{
         backend_capabilities::BackendCapabilities,
         inventory::Module,
-        ops::{plan::MountPlan, sync},
+        ops::{mirror_sync, plan::MountPlan},
         storage,
     },
     defs,
-    domain::MountMode,
     mount::kasumi,
 };
-
-#[derive(Debug, Clone, Copy)]
-pub struct KasumiPlanningState {
-    pub requested: bool,
-    pub available: bool,
-}
 
 pub struct KasumiCoordinator<'a> {
     config: &'a Config,
@@ -42,30 +35,6 @@ pub struct KasumiCoordinator<'a> {
 impl<'a> KasumiCoordinator<'a> {
     pub fn new(config: &'a Config) -> Self {
         Self { config }
-    }
-
-    pub fn module_requests_kasumi(module: &Module) -> bool {
-        matches!(module.rules.default_mode, MountMode::Kasumi)
-            || module
-                .rules
-                .paths
-                .values()
-                .any(|mode| matches!(mode, MountMode::Kasumi))
-    }
-
-    pub fn requested_by_modules(modules: &[Module]) -> bool {
-        modules.iter().any(Self::module_requests_kasumi)
-    }
-
-    pub fn planning_state(
-        &self,
-        capabilities: &BackendCapabilities,
-        modules: &[Module],
-    ) -> KasumiPlanningState {
-        KasumiPlanningState {
-            requested: Self::requested_by_modules(modules),
-            available: capabilities.can_use_kasumi(),
-        }
     }
 
     pub fn prepare_mirror_storage(
@@ -129,7 +98,7 @@ impl<'a> KasumiCoordinator<'a> {
             Path::new(defs::KASUMI_IMG_FILE),
         )?;
 
-        sync::perform_sync(&kasumi_modules, kasumi_storage.mount_point(), self.config)?;
+        mirror_sync::sync_modules(&kasumi_modules, kasumi_storage.mount_point())?;
 
         crate::scoped_log!(
             info,

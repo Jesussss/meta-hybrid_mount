@@ -26,15 +26,14 @@ use crate::{
     core::{
         backend_capabilities::BackendCapabilities,
         inventory::Module,
-        kasumi_coordinator::KasumiCoordinator,
         ops::plan::{MountPlan, OverlayOperation},
-        recovery::{FailureStage, ModuleStageFailure},
+        recovery::ModuleStageFailure,
     },
     defs,
     domain::MountMode,
     partitions,
     sys::fs::{
-        commit_prepared_dir, copy_non_dir_entry, ensure_dir_like, finalize_copied_tree,
+        PreparedDir, copy_non_dir_entry, ensure_dir_like, finalize_copied_tree,
         prune_orphaned_children, remove_path,
     },
     utils,
@@ -342,9 +341,7 @@ fn prepare_mount_plan_with_root(
         target_base.display()
     );
 
-    let kasumi = KasumiCoordinator::new(config);
-    let kasumi_planning = kasumi.planning_state(capabilities, modules);
-    if kasumi_planning.requested && !kasumi_planning.available {
+    if modules.iter().any(module_requests_kasumi) && !capabilities.can_use_kasumi() {
         if config.kasumi.enabled {
             crate::scoped_log!(
                 warn,
@@ -383,22 +380,16 @@ fn prepare_mount_plan_with_root(
 
     for module in modules {
         crate::scoped_log!(debug, "prepare", "module inspect: id={}", module.id);
-        let tmp_dst = target_base.join(format!(".tmp_{}", module.id));
-        let final_dst = target_base.join(&module.id);
-
-        let outcome = match prepare_module(module, &tmp_dst, &final_dst, system_root, &mut context)
-        {
-            Ok(outcome) => outcome,
-            Err(err) => {
-                let _ = remove_path(&tmp_dst);
-                return Err(ModuleStageFailure::new(
-                    FailureStage::Sync,
-                    vec![module.id.clone()],
-                    err,
-                )
-                .into());
-            }
-        };
+        let prepared = PreparedDir::new(target_base, &module.id)
+            .map_err(|err| module_sync_error(module, err))?;
+        let outcome = prepare_module(
+            module,
+            prepared.tmp_path(),
+            prepared.final_path(),
+            system_root,
+            &mut context,
+        )
+        .map_err(|err| module_sync_error(module, err))?;
 
         let keep_module = outcome.has_mount_content && outcome.plan.has_mount_result();
         if !keep_module {
@@ -413,36 +404,23 @@ fn prepare_mount_plan_with_root(
                     "no_mount_content"
                 }
             );
-            if let Err(err) = remove_path(&tmp_dst) {
-                crate::scoped_log!(
-                    warn,
-                    "prepare",
-                    "cleanup temp failed: id={}, path={}, error={:#}",
-                    module.id,
-                    tmp_dst.display(),
-                    err
-                );
-            }
-            if let Err(err) = remove_path(&final_dst) {
+            if let Err(err) = remove_path(prepared.final_path()) {
                 crate::scoped_log!(
                     warn,
                     "prepare",
                     "cleanup stale module failed: id={}, path={}, error={:#}",
                     module.id,
-                    final_dst.display(),
+                    prepared.final_path().display(),
                     err
                 );
             }
             continue;
         }
 
-        finalize_copied_tree(&module.id, &tmp_dst, &outcome.opaque_dirs);
-        if let Err(err) = commit_prepared_dir(&module.id, &tmp_dst, &final_dst) {
-            let _ = remove_path(&tmp_dst);
-            return Err(
-                ModuleStageFailure::new(FailureStage::Sync, vec![module.id.clone()], err).into(),
-            );
-        }
+        finalize_copied_tree(&module.id, prepared.tmp_path(), &outcome.opaque_dirs);
+        prepared
+            .commit()
+            .map_err(|err| module_sync_error(module, err))?;
 
         merge_overlay_groups(&mut overlay_groups, outcome.plan.overlay_groups);
         if outcome.plan.magic {
@@ -524,7 +502,6 @@ fn prepare_module(
         return Ok(ModulePrepareOutcome::default());
     }
 
-    remove_path(tmp_dst)?;
     ensure_dir_like(&module.source_path, tmp_dst)?;
 
     let mut outcome = ModulePrepareOutcome::default();
@@ -581,6 +558,19 @@ fn prepare_module(
     }
 
     Ok(outcome)
+}
+
+fn module_requests_kasumi(module: &Module) -> bool {
+    matches!(module.rules.default_mode, MountMode::Kasumi)
+        || module
+            .rules
+            .paths
+            .values()
+            .any(|mode| matches!(mode, MountMode::Kasumi))
+}
+
+fn module_sync_error(module: &Module, err: anyhow::Error) -> anyhow::Error {
+    ModuleStageFailure::sync_one(&module.id, err).into()
 }
 
 fn queue_overlay(

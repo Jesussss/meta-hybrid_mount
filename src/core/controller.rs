@@ -35,7 +35,7 @@ use crate::{
             plan::MountPlan,
             prepare,
         },
-        recovery::{FailureStage, ModuleStageFailure},
+        recovery::ModuleStageFailure,
         runtime_finalization,
         storage::StorageHandle,
     },
@@ -157,8 +157,7 @@ impl MountController<StorageReady> {
                 self.state.handle.mount_point(),
             )
             .map_err(|err| {
-                ModuleStageFailure::new(
-                    FailureStage::Sync,
+                ModuleStageFailure::sync(
                     plan.kasumi_module_ids.clone(),
                     anyhow::anyhow!("Failed to prepare Kasumi mirror storage: {:#}", err),
                 )

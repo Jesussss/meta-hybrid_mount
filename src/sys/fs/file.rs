@@ -107,6 +107,92 @@ pub fn remove_path(path: &Path) -> Result<()> {
     }
 }
 
+pub struct PreparedDir {
+    id: String,
+    tmp_dst: PathBuf,
+    final_dst: PathBuf,
+    cleanup_tmp: bool,
+}
+
+impl PreparedDir {
+    pub fn new(target_base: &Path, id: &str) -> Result<Self> {
+        let tmp_dst = target_base.join(format!(".tmp_{id}"));
+        remove_path(&tmp_dst)?;
+        Ok(Self {
+            id: id.to_string(),
+            tmp_dst,
+            final_dst: target_base.join(id),
+            cleanup_tmp: true,
+        })
+    }
+
+    pub fn tmp_path(&self) -> &Path {
+        &self.tmp_dst
+    }
+
+    pub fn final_path(&self) -> &Path {
+        &self.final_dst
+    }
+
+    pub fn commit(mut self) -> Result<()> {
+        let backup_dst = self
+            .final_dst
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join(format!(".backup_{}", self.id));
+        remove_path(&backup_dst)?;
+
+        let mut backup_created = false;
+        if self.final_dst.exists() {
+            fs::rename(&self.final_dst, &backup_dst).with_context(|| {
+                format!(
+                    "failed to back up prepared dir {} from {} to {}",
+                    self.id,
+                    self.final_dst.display(),
+                    backup_dst.display()
+                )
+            })?;
+            backup_created = true;
+        }
+
+        if let Err(err) = fs::rename(&self.tmp_dst, &self.final_dst).with_context(|| {
+            format!(
+                "failed to commit prepared dir {} from {} to {}",
+                self.id,
+                self.tmp_dst.display(),
+                self.final_dst.display()
+            )
+        }) {
+            if backup_created {
+                let _ = fs::rename(&backup_dst, &self.final_dst);
+            }
+            return Err(err);
+        }
+
+        self.cleanup_tmp = false;
+        if backup_created && let Err(err) = remove_path(&backup_dst) {
+            crate::scoped_log!(
+                warn,
+                "fs:copy",
+                "cleanup backup failed: id={}, path={}, error={:#}",
+                self.id,
+                backup_dst.display(),
+                err
+            );
+        }
+
+        Ok(())
+    }
+}
+
+impl Drop for PreparedDir {
+    fn drop(&mut self) {
+        if self.cleanup_tmp {
+            let _ = remove_path(&self.tmp_dst);
+        }
+    }
+}
+
 pub fn prune_orphaned_children<'a, I>(
     target_base: &Path,
     active_names: I,
@@ -212,52 +298,6 @@ pub fn finalize_copied_tree(id: &str, root: &Path, opaque_dirs: &[PathBuf]) {
             );
         }
     }
-}
-
-pub fn commit_prepared_dir(id: &str, tmp_dst: &Path, final_dst: &Path) -> Result<()> {
-    let backup_dst = final_dst
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join(format!(".backup_{id}"));
-    remove_path(&backup_dst)?;
-
-    let mut backup_created = false;
-    if final_dst.exists() {
-        fs::rename(final_dst, &backup_dst).with_context(|| {
-            format!(
-                "failed to back up prepared dir {id} from {} to {}",
-                final_dst.display(),
-                backup_dst.display()
-            )
-        })?;
-        backup_created = true;
-    }
-
-    if let Err(err) = fs::rename(tmp_dst, final_dst).with_context(|| {
-        format!(
-            "failed to commit prepared dir {id} from {} to {}",
-            tmp_dst.display(),
-            final_dst.display()
-        )
-    }) {
-        if backup_created {
-            let _ = fs::rename(&backup_dst, final_dst);
-        }
-        return Err(err);
-    }
-
-    if backup_created && let Err(err) = remove_path(&backup_dst) {
-        crate::scoped_log!(
-            warn,
-            "fs:copy",
-            "cleanup backup failed: id={}, path={}, error={:#}",
-            id,
-            backup_dst.display(),
-            err
-        );
-    }
-
-    Ok(())
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
