@@ -341,7 +341,7 @@ fn configure_flavor_config(stage_dir: &Path, flavor: BuildFlavor) -> Result<()> 
     let config_path = stage_dir.join("config.toml");
     let content = fs::read_to_string(&config_path)
         .with_context(|| format!("failed to read staged config {}", config_path.display()))?;
-    let mut value = content
+    let mut value = strip_toml_preamble(&content)
         .parse::<toml::Value>()
         .with_context(|| format!("failed to parse staged config {}", config_path.display()))?;
     let table = value
@@ -365,6 +365,22 @@ fn configure_flavor_config(stage_dir: &Path, flavor: BuildFlavor) -> Result<()> 
     Ok(())
 }
 
+fn strip_toml_preamble(content: &str) -> &str {
+    let content = content.strip_prefix('\u{feff}').unwrap_or(content);
+    let mut offset = 0;
+
+    for line in content.split_inclusive('\n') {
+        let trimmed = line.trim_start();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            offset += line.len();
+            continue;
+        }
+        break;
+    }
+
+    &content[offset..]
+}
+
 fn remove_path_if_exists(path: &Path) -> Result<()> {
     if !path.exists() {
         return Ok(());
@@ -375,6 +391,29 @@ fn remove_path_if_exists(path: &Path) -> Result<()> {
         fs::remove_file(path)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strip_toml_preamble;
+
+    #[test]
+    fn strips_leading_comment_block_before_toml() {
+        let input = r#"# Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
+#
+
+key = "value"
+"#;
+
+        assert_eq!(strip_toml_preamble(input), "key = \"value\"\n");
+    }
+
+    #[test]
+    fn keeps_non_comment_toml_untouched() {
+        let input = "key = \"value\"\n";
+
+        assert_eq!(strip_toml_preamble(input), input);
+    }
 }
 
 fn maybe_notify_build(output_dir: &Path, notify_plan: Option<&NotifyPlan>) -> Result<()> {
