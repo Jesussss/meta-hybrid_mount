@@ -267,9 +267,9 @@ jobs:
             $prerelease_flag \
             --title "$tag" \
             --notes-file /tmp/changelog.md \
-            ${{ env.FULL_ZIP_PATH }} \
-            ${{ env.LITE_ZIP_PATH }} \
-            ${{ env.NANO_ZIP_PATH }}
+            "${{ env.FULL_ZIP_PATH }}" \
+            "${{ env.LITE_ZIP_PATH }}" \
+            "${{ env.NANO_ZIP_PATH }}"
 
           gh release edit "$tag" \
             --repo "$repo" \

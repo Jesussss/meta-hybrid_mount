@@ -40,6 +40,7 @@ RUN apt-get update \
     curl \
     file \
     gcc-multilib \
+    gh \
     git \
     jq \
     libclang-dev \
@@ -71,6 +72,7 @@ RUN curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs \
   && cargo ndk --help >/dev/null
 
 RUN rustc +${RUST_TOOLCHAIN} --version \
+	&& gh --version \
   && cargo +${RUST_TOOLCHAIN} --version \
   && cargo ndk --version \
   && jq --version \
