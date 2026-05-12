@@ -390,29 +390,6 @@ fn remove_path_if_exists(path: &Path) -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::strip_toml_preamble;
-
-    #[test]
-    fn strips_leading_comment_block_before_toml() {
-        let input = r#"# Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
-#
-
-key = "value"
-"#;
-
-        assert_eq!(strip_toml_preamble(input), "key = \"value\"\n");
-    }
-
-    #[test]
-    fn keeps_non_comment_toml_untouched() {
-        let input = "key = \"value\"\n";
-
-        assert_eq!(strip_toml_preamble(input), input);
-    }
-}
-
 fn maybe_notify_build(output_dir: &Path, notify_plan: Option<&NotifyPlan>) -> Result<()> {
     let Some(notify_plan) = notify_plan else {
         return Ok(());
@@ -727,4 +704,27 @@ fn update_cargo_toml_version(version: &str) -> Result<()> {
         writeln!(file, "{}", line)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strip_toml_preamble;
+
+    #[test]
+    fn strips_leading_comment_block_before_toml() {
+        let input = r#"# Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
+#
+
+key = "value"
+"#;
+
+        assert_eq!(strip_toml_preamble(input), "key = \"value\"\n");
+    }
+
+    #[test]
+    fn keeps_non_comment_toml_untouched() {
+        let input = "key = \"value\"\n";
+
+        assert_eq!(strip_toml_preamble(input), input);
+    }
 }

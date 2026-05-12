@@ -12,24 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use anyhow::Result;
-#[cfg(feature = "control-plane")]
-use clap::Parser;
-use hybrid_mount::{conf::cli::Cli, core};
-
-fn main() -> Result<()> {
-    if matches!(std::env::var("KSU_LATE_LOAD").as_deref(), Ok("1")) {
-        panic!("不支持Late-load（越狱）模式");
-    }
-
-    #[cfg(feature = "control-plane")]
-    {
-        let cli = Cli::parse();
-        core::entry::run(cli)
-    }
-
-    #[cfg(not(feature = "control-plane"))]
-    {
-        core::startup::run_default()
-    }
-}
+pub mod conf;
+pub mod core;
+pub mod defs;
+pub mod domain;
+pub mod mount;
+pub mod partitions;
+pub mod sys;
+pub mod utils;

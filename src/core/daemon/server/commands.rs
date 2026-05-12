@@ -862,25 +862,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn validate_url_accepts_http_and_https() {
+    fn validate_url_accepts_valid_and_rejects_invalid() {
+        // Accept http/https
         assert!(validate_url("https://example.com").is_ok());
         assert!(validate_url("http://localhost:8080/path?q=1").is_ok());
-    }
 
-    #[test]
-    fn validate_url_rejects_non_http_schemes() {
+        // Reject non-http schemes
         assert!(validate_url("ftp://example.com").is_err());
         assert!(validate_url("javascript:alert(1)").is_err());
         assert!(validate_url("file:///etc/passwd").is_err());
-    }
 
-    #[test]
-    fn validate_url_rejects_flag_like_patterns() {
+        // Reject flag injection
         assert!(validate_url("https://example.com --es extra value").is_err());
-    }
 
-    #[test]
-    fn validate_url_rejects_control_chars() {
+        // Reject control characters
         assert!(validate_url("https://example.com\n").is_err());
         assert!(validate_url("https://example.com\r\n").is_err());
         assert!(validate_url("https://ex\0ample.com").is_err());

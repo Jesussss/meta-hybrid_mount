@@ -75,15 +75,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn valid_module_ids() {
+    fn validate_module_id_accepts_and_rejects() {
         assert!(validate_module_id("MyModule").is_ok());
         assert!(validate_module_id("ab").is_ok());
         assert!(validate_module_id("a1_b.c-d").is_ok());
         assert!(validate_module_id("ABC123").is_ok());
-    }
 
-    #[test]
-    fn invalid_module_ids() {
         assert!(validate_module_id("").is_err());
         assert!(validate_module_id("1abc").is_err());
         assert!(validate_module_id("-abc").is_err());

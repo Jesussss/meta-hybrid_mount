@@ -556,21 +556,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_content_length_accepts_valid_value() {
+    fn parse_content_length_validates_and_rejects() {
         assert_eq!(parse_content_length("128").unwrap(), 128);
-    }
 
-    #[test]
-    fn parse_content_length_rejects_invalid_value() {
         let err = parse_content_length("nope").unwrap_err();
         assert_eq!(
             err.downcast_ref::<WebuiHttpRequestReadError>(),
             Some(&WebuiHttpRequestReadError::InvalidContentLength)
         );
-    }
 
-    #[test]
-    fn parse_content_length_rejects_oversized_value() {
         let err = parse_content_length(&(MAX_WEBUI_HTTP_BODY_BYTES + 1).to_string()).unwrap_err();
         assert_eq!(
             err.downcast_ref::<WebuiHttpRequestReadError>(),
@@ -589,7 +583,7 @@ mod tests {
     }
 
     #[test]
-    fn connection_guard_tracks_active_connections() {
+    fn connection_guard_tracks_and_enforces_limit() {
         let active_connections = Arc::new(AtomicUsize::new(0));
         {
             let _first = ActiveWebuiConnectionGuard::try_acquire(&active_connections).unwrap();
@@ -598,12 +592,9 @@ mod tests {
             assert_eq!(active_connections.load(Ordering::Relaxed), 2);
         }
         assert_eq!(active_connections.load(Ordering::Relaxed), 0);
-    }
 
-    #[test]
-    fn connection_guard_enforces_connection_limit() {
-        let active_connections = Arc::new(AtomicUsize::new(MAX_WEBUI_CONNECTIONS));
-        assert!(ActiveWebuiConnectionGuard::try_acquire(&active_connections).is_none());
+        let full = Arc::new(AtomicUsize::new(MAX_WEBUI_CONNECTIONS));
+        assert!(ActiveWebuiConnectionGuard::try_acquire(&full).is_none());
     }
 
     #[test]
