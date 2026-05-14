@@ -17,7 +17,81 @@ pub mod listing;
 
 pub use discovery::*;
 
-use crate::defs;
+#[cfg(not(feature = "control-plane"))]
+use crate::domain::MountMode;
+use crate::{conf::config::Config, defs, domain::ModuleRules};
+
+pub fn load_module_rules(config: &Config, module_id: &str) -> ModuleRules {
+    let mut rules = ModuleRules {
+        default_mode: config.default_mode.as_mount_mode(),
+        ..Default::default()
+    };
+
+    if let Some(global_rules) = config.rules.get(module_id) {
+        rules.default_mode = global_rules.default_mode;
+        rules.paths.extend(global_rules.paths.clone());
+    }
+
+    #[cfg(not(feature = "control-plane"))]
+    apply_nano_rules(config, &mut rules);
+
+    rules
+}
+
+#[cfg(not(feature = "control-plane"))]
+fn apply_nano_rules(config: &Config, rules: &mut ModuleRules) {
+    let overlay_whitelist = config
+        .overlay_whitelist
+        .iter()
+        .map(|path| normalize_rule_path(path))
+        .filter(|path| !path.is_empty())
+        .collect::<Vec<_>>();
+
+    let mut normalized_paths = std::collections::HashMap::new();
+    for (path, mode) in rules.paths.drain() {
+        let path = normalize_rule_path(std::path::Path::new(&path));
+        if path.is_empty() {
+            continue;
+        }
+        let mode = match mode {
+            MountMode::Ignore => MountMode::Ignore,
+            _ if overlay_whitelist
+                .iter()
+                .any(|prefix| path_matches_policy_prefix(&path, prefix)) =>
+            {
+                MountMode::Overlay
+            }
+            _ => MountMode::Magic,
+        };
+        normalized_paths.insert(path, mode);
+    }
+
+    for path in overlay_whitelist {
+        normalized_paths.insert(path, MountMode::Overlay);
+    }
+
+    rules.default_mode = MountMode::Magic;
+    rules.paths = normalized_paths;
+}
+
+#[cfg(not(feature = "control-plane"))]
+fn normalize_rule_path(path: &std::path::Path) -> String {
+    path.components()
+        .filter_map(|component| match component {
+            std::path::Component::Normal(value) => Some(value.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+#[cfg(not(feature = "control-plane"))]
+fn path_matches_policy_prefix(path: &str, prefix: &str) -> bool {
+    path == prefix
+        || path
+            .strip_prefix(prefix)
+            .is_some_and(|rest| rest.starts_with('/'))
+}
 
 pub fn is_reserved_module_dir(id: &str) -> bool {
     matches!(

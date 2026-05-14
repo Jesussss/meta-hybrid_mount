@@ -1,4 +1,106 @@
 
+## v4.0.5
+
+
+### <!-- 4 --> Refactors
+
+- `tests` Improve test function names for clarity and consistency
+
+- Reorganize imports for better clarity in main.rs
+
+
+
+
+## v4.0.1
+
+
+### <!-- 1 --> Features
+
+- Enhance daemon and web UI with system info and runtime validation - Refactor server handling to use poll for improved performance. - Introduce system_info in API responses and update related interfaces. - Add URL validation to prevent malformed requests. - Improve error handling in config and kasumi stores with warnings for missing data. - Update App initialization to load UI and daemon concurrently.
+
+- `App` Enhance app initialization phase tracking and loading UI
+
+- `daemon` Add daemon_startup_mode config with persistent boot and webui toggle Add a daemon_startup_mode config option (on-demand / persistent) that controls whether the daemon starts on-demand via KSU exec or persists at boot via service.sh. Includes ping-first bridge optimization for faster reconnection. Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+
+- Update TopBar to provide default app name and language title; add preconnect and styles in index.html
+
+- Add clear mount errors functionality and UI updates - Implemented clearMountErrors API method in both mock and real API. - Updated AppAPI interface to include clearMountErrors. - Added clear-mount-errors command to the daemon command payload. - Enhanced Module interface to include mount_error property. - Added localization strings for mount error messages in multiple languages. - Introduced error indicators and banners in the ModulesTab component to display mount errors. - Added a button to clear mount errors, with loading state management.
+
+- Enhance mount error handling and add clear mount errors functionality
+
+
+
+### <!-- 2 --> Fixes
+
+- `schema` Replace manual Default impl with derive macro for DaemonStartupMode
+
+- `nuke` Skip nuke execution if KSU is not loaded
+
+
+
+### <!-- 8 --> Maintenance
+
+- Revert "feat(App): enhance app initialization phase tracking and loading UI" This reverts commit 08534f6f316b3f73ca2e09b95efdea4a5f8ff8ba.
+
+
+
+
+## v4.0.0
+
+
+### <!-- 1 --> Features
+
+- Enhance ksu handling in module loading and add fallback check
+
+- `daemon` Implement command handling and HTTP server for WebUI - Added `commands.rs` to handle various daemon commands including status, configuration, and Kasumi operations. - Introduced `http.rs` to manage the HTTP server for WebUI interactions, including session management and SSE support. - Implemented request validation and response formatting for daemon commands. - Created validation schemas in `validation.ts` for structured error handling and response parsing in the WebUI.
+
+- `App` Ensure status is loaded during app initialization
+
+
+
+### <!-- 2 --> Fixes
+
+- Review and harden frontend-backend interaction - saveConfigToFile now includes kasumi and rules fields (was silently dropping) - Replace fastrand token generation with /dev/urandom CSPRNG - Use {err} instead of {err:#} in HTTP responses to avoid leaking filesystem paths - Remove Access-Control-Allow-Private-Network CORS header - Add /proc/<pid>/cmdline verification to PID file cleanup - Add config.toml.bak backup before overwriting config - Remove duplicate KasumiUnameMode enum, reuse schema::KasumiUnameMode - Replace inverted bool return with ConnectionAction enum in HTTP handler - Add typed DaemonCommandPayload discriminated union matching Rust serde tags - Add runDaemonCommand() bypassing JSON-in-shell-string round-trip - Preserve first error in bridge retry for debugging - Fix clearKasumiUname transaction order (clear runtime before config) - Fix ensureDaemonAwake TOCTOU race - Add proper types to RuntimeStatePayload stable fields - Rename parseHybridMountJsonOutput to parseDaemonJsonOutput - Clarify extractConfig fallback logic with comment
+
+
+
+### <!-- 4 --> Refactors
+
+- Remove module metadata from runtime entries and tests for cleaner payload handling
+
+- `runtime_state` Simplify conditional check in save method
+
+- `sysStore` Remove redundant systemInfo updates in handleSseUpdate
+
+
+
+### <!-- 8 --> Maintenance
+
+- Update .gitignore to include CLAUDE.md
+
+- Pnpm format
+
+- Make clippy happy
+
+
+
+### <!-- 9 --> Other
+
+- Refactor inventory discovery and planner modules for improved directory handling and performance
+
+
+
+
+## v3.6.1
+
+
+### <!-- 1 --> Features
+
+- Add jq installation to Dockerfile and ensure jq is available in release workflow
+
+
+
+
 ## v3.5.6
 
 

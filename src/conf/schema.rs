@@ -14,7 +14,6 @@
 
 use std::{collections::HashMap, path::PathBuf};
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -94,6 +93,14 @@ pub struct KasumiUnameConfig {
     pub domainname: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum KasumiUnameMode {
+    #[default]
+    Scoped,
+    Global,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct KasumiMountHideConfig {
     #[serde(default)]
@@ -137,11 +144,15 @@ pub struct KasumiConfig {
     #[serde(default)]
     pub enable_statfs_spoof: bool,
     #[serde(default)]
+    pub enable_selinux_fix: bool,
+    #[serde(default)]
     pub mount_hide: KasumiMountHideConfig,
     #[serde(default)]
     pub statfs_spoof: KasumiStatfsSpoofConfig,
     #[serde(default)]
     pub hide_uids: Vec<u32>,
+    #[serde(default)]
+    pub uname_mode: KasumiUnameMode,
     #[serde(default)]
     pub uname: KasumiUnameConfig,
     #[serde(default)]
@@ -166,13 +177,32 @@ impl Default for KasumiConfig {
             enable_mount_hide: false,
             enable_maps_spoof: false,
             enable_statfs_spoof: false,
+            enable_selinux_fix: false,
             mount_hide: KasumiMountHideConfig::default(),
             statfs_spoof: KasumiStatfsSpoofConfig::default(),
             hide_uids: Vec::new(),
+            uname_mode: KasumiUnameMode::Scoped,
             uname: KasumiUnameConfig::default(),
             cmdline_value: String::new(),
             kstat_rules: Vec::new(),
             maps_rules: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum DaemonStartupMode {
+    #[default]
+    OnDemand,
+    Persistent,
+}
+
+impl std::fmt::Display for DaemonStartupMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::OnDemand => write!(f, "on-demand"),
+            Self::Persistent => write!(f, "persistent"),
         }
     }
 }
@@ -183,8 +213,6 @@ pub struct Config {
     pub moduledir: PathBuf,
     #[serde(default = "default_mountsource")]
     pub mountsource: String,
-    #[serde(default, deserialize_with = "deserialize_partitions_flexible")]
-    pub partitions: Vec<String>,
     #[serde(default)]
     pub overlay_mode: OverlayMode,
     #[serde(default)]
@@ -193,10 +221,15 @@ pub struct Config {
     pub enable_overlay_fallback: bool,
     #[serde(default)]
     pub default_mode: DefaultMode,
-    #[serde(default, alias = "hymofs")]
+    #[cfg(not(feature = "control-plane"))]
+    #[serde(default = "default_nano_overlay_whitelist")]
+    pub overlay_whitelist: Vec<PathBuf>,
+    #[serde(default)]
     pub kasumi: KasumiConfig,
     #[serde(default)]
     pub rules: HashMap<String, ModuleRules>,
+    #[serde(default)]
+    pub daemon_startup_mode: DaemonStartupMode,
 }
 
 fn default_moduledir() -> PathBuf {
@@ -215,29 +248,16 @@ fn default_kasumi_lkm_dir() -> PathBuf {
     PathBuf::from(defs::KASUMI_LKM_DIR)
 }
 
-fn default_true() -> bool {
-    true
+#[cfg(not(feature = "control-plane"))]
+fn default_nano_overlay_whitelist() -> Vec<PathBuf> {
+    defs::NANO_OVERLAY_WHITELIST
+        .iter()
+        .map(PathBuf::from)
+        .collect()
 }
 
-fn deserialize_partitions_flexible<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum StringOrVec {
-        String(String),
-        Vec(Vec<String>),
-    }
-
-    match StringOrVec::deserialize(deserializer)? {
-        StringOrVec::Vec(v) => Ok(v),
-        StringOrVec::String(s) => Ok(s
-            .split(',')
-            .map(|item| item.trim().to_string())
-            .filter(|item| !item.is_empty())
-            .collect()),
-    }
+fn default_true() -> bool {
+    true
 }
 
 impl Default for Config {
@@ -245,55 +265,15 @@ impl Default for Config {
         Self {
             moduledir: default_moduledir(),
             mountsource: default_mountsource(),
-            partitions: Vec::new(),
             overlay_mode: OverlayMode::default(),
             disable_umount: false,
             enable_overlay_fallback: false,
             default_mode: DefaultMode::default(),
+            #[cfg(not(feature = "control-plane"))]
+            overlay_whitelist: default_nano_overlay_whitelist(),
             kasumi: KasumiConfig::default(),
             rules: HashMap::new(),
+            daemon_startup_mode: DaemonStartupMode::default(),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn partitions_from_comma_separated_string() {
-        let config: Config = toml::from_str(r#"partitions = "system,vendor,product""#).unwrap();
-        assert_eq!(config.partitions, vec!["system", "vendor", "product"]);
-    }
-
-    #[test]
-    fn partitions_from_array() {
-        let config: Config =
-            toml::from_str(r#"partitions = ["system", "vendor", "product"]"#).unwrap();
-        assert_eq!(config.partitions, vec!["system", "vendor", "product"]);
-    }
-
-    #[test]
-    fn partitions_string_with_spaces() {
-        let config: Config = toml::from_str(r#"partitions = "system, vendor , product""#).unwrap();
-        assert_eq!(config.partitions, vec!["system", "vendor", "product"]);
-    }
-
-    #[test]
-    fn partitions_empty_string() {
-        let config: Config = toml::from_str(r#"partitions = """#).unwrap();
-        assert!(config.partitions.is_empty());
-    }
-
-    #[test]
-    fn partitions_empty_array() {
-        let config: Config = toml::from_str(r#"partitions = []"#).unwrap();
-        assert!(config.partitions.is_empty());
-    }
-
-    #[test]
-    fn partitions_default_when_missing() {
-        let config: Config = toml::from_str("").unwrap();
-        assert!(config.partitions.is_empty());
     }
 }

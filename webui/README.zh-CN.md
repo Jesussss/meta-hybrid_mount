@@ -1,6 +1,6 @@
 # Hybrid Mount WebUI
 
-<img src="https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/master/icon.svg" align="right" width="120" />
+<img src="https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/main/icon.svg" align="right" width="120" />
 
 ![语言](https://img.shields.io/badge/Language-TypeScript-3178C6?style=flat-square&logo=typescript)
 ![框架](https://img.shields.io/badge/Framework-SolidJS-2C4F7C?style=flat-square&logo=solid)
@@ -107,6 +107,8 @@ pnpm build
 pnpm preview
 pnpm lint
 ```
+
+`pnpm dev` 默认使用 `MockAPI`。如需在开发服务器中连接真实 KernelSU bridge，可使用 `VITE_USE_MOCK=false pnpm dev`。
 
 ## 适配说明
 
